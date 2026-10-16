@@ -39,6 +39,8 @@ dependencies:
   firebase_messaging: ^16.7.0
   flutter_local_notifications: ^22.3.2
   url_launcher: ^6.3.3
+  # Quick Report device id
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:

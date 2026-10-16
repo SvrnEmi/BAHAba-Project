@@ -17,7 +17,8 @@ import {
   Clock,
   XCircle,
   Trash2,
-  LogOut
+  LogOut,
+  Waves
 } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from "../../lib/supabase";
@@ -26,6 +27,7 @@ import { subscribeToTable } from "../../lib/realtime";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../lib/auth";
 import { playNotificationSound, readAdminPopupPrefs } from "../../lib/adminPrefs";
+import { QuickReportsPanel, useQuickReportPendingCount } from "./QuickReportsPanel";
 import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
 
 // Alert Level Types (ISO Standard)
@@ -103,6 +105,8 @@ export function MDRRMOAdminDashboard() {
   const summaryShownRef = useRef(false);
   const toastIdRef = useRef(0);
 
+  // Pending Quick Reports for the tab badge (shares the quick_reports channel with the panel).
+  const quickReportsPending = useQuickReportPendingCount();
   // Recent updates: derived from the reports/alerts state below (no extra queries or channels).
   const recentUpdates = useRecentUpdates(reports, alerts, loadingData, session?.user.id ?? null);
 
@@ -787,9 +791,11 @@ export function MDRRMOAdminDashboard() {
                 { id: "analytics", label: "Analytics & Metrics", icon: BarChart3 },
                 { id: "alerts", label: "Create System Alert", icon: Radio },
                 { id: "reports", label: "Verify Reports", icon: MapPin },
+                { id: "quick-reports", label: "Quick Reports", icon: Waves, badge: quickReportsPending },
                 { id: "audit", label: "Audit Trail", icon: Clock },
               ].map((tab) => {
                 const TabIcon = tab.icon;
+                const badge = "badge" in tab ? tab.badge : null;
                 return (
                   <button
                     key={tab.id}
@@ -800,6 +806,11 @@ export function MDRRMOAdminDashboard() {
                   >
                     <TabIcon size={18} />
                     {tab.label}
+                    {badge ? (
+                      <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "var(--risk-high)" }}>
+                        {badge}<span className="sr-only"> pending</span>
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -807,6 +818,8 @@ export function MDRRMOAdminDashboard() {
           </div>
 
           <div className="p-6">
+            {activeTab === "quick-reports" && <QuickReportsPanel />}
+
             {/* Overview Tab */}
             {activeTab === "overview" && (
               <div className="space-y-6">

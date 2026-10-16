@@ -4,6 +4,7 @@ import { Waves, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { parseRole, useAuth } from "../../lib/auth";
 import { ClayLogoBadge } from "./clay/Clay";
+import { HotlineButtons } from "./QuickReport";
 
 const getFriendlyAuthError = (error: unknown) => {
   const rawMessage = error instanceof Error ? error.message : String(error ?? "");
@@ -258,6 +259,23 @@ export function Login() {
             Create Account
           </button>
         </div>
+
+        <section className="clay mt-6 space-y-3 p-5" style={{ borderRadius: 28 }} aria-labelledby="quick-report-title">
+          <h2 id="quick-report-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+            Quick Report
+          </h2>
+          <p style={{ color: "var(--text-secondary)" }}>No account? Report a flood in under a minute.</p>
+          <button type="button" onClick={() => navigate("/quick-report")} className="clay-btn clay-btn-primary w-full">
+            Quick Report
+          </button>
+        </section>
+
+        <section className="clay mt-4 space-y-3 p-5" style={{ borderRadius: 28 }} aria-labelledby="emergency-title">
+          <h2 id="emergency-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+            Emergency
+          </h2>
+          <HotlineButtons compact />
+        </section>
       </div>
     </div>
   );

@@ -51,4 +51,6 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    # Copies of ../terms_of_service.md and ../privacy_policy.md (kept in sync by test/legal_docs_test.dart)
+    - assets/legal/
 

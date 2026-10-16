@@ -165,6 +165,28 @@ test.describe("Quick Report (public)", () => {
   });
 });
 
+test.describe("Terms and Privacy pages", () => {
+  test("are public, render the documents, and are linked from Quick Report", async ({ page, context }) => {
+    await mockBackend(context);
+    await page.goto("/terms");
+    await expect(page).toHaveURL(/\/terms$/);
+    await expect(page.getByRole("heading", { level: 1, name: "BAHAba Terms of Service" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quick Report (no account)" })).toBeVisible();
+    await expect(page.locator("strong", { hasText: "BAHAba is an information aid." })).toBeVisible();
+
+    await page.goto("/privacy");
+    await expect(page.getByRole("heading", { level: 1, name: "BAHAba Privacy Policy" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Why we collect it" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /random device ID/ })).toBeVisible();
+    await expect(page.getByText("Phone: +63 919 079 8427")).toBeVisible();
+
+    await page.goto("/quick-report");
+    await page.getByRole("link", { name: "Privacy Policy" }).click();
+    await expect(page).toHaveURL(/\/privacy$/);
+    await expect(page.getByRole("heading", { level: 1, name: "BAHAba Privacy Policy" })).toBeVisible();
+  });
+});
+
 test.describe("MDRRMO Quick Reports review", () => {
   async function openTab(page: Page) {
     await page.goto("/login");

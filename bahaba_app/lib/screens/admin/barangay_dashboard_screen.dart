@@ -16,6 +16,7 @@ import '../../widgets/profile_avatar_button.dart';
 import '../../widgets/flat_status_card.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/risk_badge.dart';
+import '../../widgets/brand_logo.dart';
 
 /// Barangay admin dashboard, mirroring the web BarangayAdminDashboard:
 /// stats, water level controls, alert submission to MDRRMO, alert history
@@ -217,18 +218,20 @@ class _BarangayAdminDashboardScreenState
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Barangay Admin - ${hasBarangay ? name : 'Unassigned'}',
-              style: AppText.heading(size: 18),
-            ),
-            const Text(
-              'Barangay Management Dashboard',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-            ),
-          ],
+        title: BrandAppBarTitle(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Barangay Admin - ${hasBarangay ? name : 'Unassigned'}',
+                style: AppText.heading(size: 18),
+              ),
+              const Text(
+                'Barangay Management Dashboard',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
         ),
         actions: [
           // Profile (logout lives there now).

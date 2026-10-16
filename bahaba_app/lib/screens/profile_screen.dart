@@ -18,6 +18,7 @@ import '../widgets/flat_status_card.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/report_status_badge.dart';
 import '../widgets/risk_badge.dart';
+import '../widgets/brand_logo.dart';
 
 /// Collapsible sections of the Profile screen. Pass one as
 /// [ProfileScreen.initialSection] to open it straight away (deep link).
@@ -136,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: const BrandAppBarTitle(child: Text('Profile'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
         children: [
@@ -1174,7 +1175,7 @@ class _LogoutButtonState extends State<_LogoutButton> {
     setState(() => _busy = true);
     // Existing cleanup: removes this device's push token, then signs out.
     await context.read<AppState>().logout();
-    if (mounted) AppNavigator.goToLogin(context);
+    if (mounted) AppNavigator.goToWelcome(context);
   }
 
   @override

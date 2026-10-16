@@ -46,6 +46,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # Generates the Android launcher icons: dart run flutter_launcher_icons
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -53,4 +55,16 @@ flutter:
     - .env
     # Copies of ../terms_of_service.md and ../privacy_policy.md (kept in sync by test/legal_docs_test.dart)
     - assets/legal/
+    # BAHAba logo (symbol only, no text): teal tile and bare colour symbol
+    - assets/brand/logo-512.png
+    - assets/brand/symbol-color-512.png
+
+# Source images live in assets/icon/ (not bundled in the app).
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app-icon-1024.png"
+  adaptive_icon_background: "#0E93AE"
+  adaptive_icon_foreground: "assets/icon/icon-foreground-1024.png"
+  min_sdk_android: 21
 

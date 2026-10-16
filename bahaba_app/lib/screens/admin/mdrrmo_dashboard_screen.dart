@@ -15,6 +15,7 @@ import '../../widgets/profile_avatar_button.dart';
 import '../../widgets/flat_status_card.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/risk_badge.dart';
+import '../../widgets/brand_logo.dart';
 
 Color _alertLevelColor(AlertLevel level) {
   switch (level) {
@@ -282,15 +283,17 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('MDRRMO Admin', style: AppText.heading(size: 18)),
-            const Text(
-              'Municipal Disaster Risk Reduction & Management Office',
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-            ),
-          ],
+        title: BrandAppBarTitle(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('MDRRMO Admin', style: AppText.heading(size: 18)),
+              const Text(
+                'Municipal Disaster Risk Reduction & Management Office',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
         ),
         actions: [
           // Profile (logout lives there now).

@@ -135,33 +135,6 @@ class _ClayScope extends InheritedWidget {
   bool updateShouldNotify(_ClayScope oldWidget) => false;
 }
 
-/// BAHAba logo: a raised clay disc around a flat primary-gradient core.
-class ClayLogoBadge extends StatelessWidget {
-  final double size;
-  final double iconSize;
-
-  const ClayLogoBadge({super.key, this.size = 104, this.iconSize = 48});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClayContainer(
-      circle: true,
-      width: size,
-      height: size,
-      padding: EdgeInsets.all(size * 0.14),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: AppClay.primaryGradient,
-        ),
-        child: Center(
-          child: Icon(Icons.waves, size: iconSize, color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
 /// Round pastel clay chip with an icon in the matching dark color and an
 /// optional 12px [label] underneath. Inside another clay surface it renders
 /// as a flat pastel circle (see [ClayContainer]).

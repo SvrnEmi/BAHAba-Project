@@ -63,7 +63,20 @@ export function PublicOnlyRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** "/", catch-all and legacy entry points: the user's own home, or /login when signed out. */
+/**
+ * The Welcome page at "/": shown only to signed-out visitors. A signed-in
+ * user goes straight to their role's home; a session without a valid
+ * BAHAba role (e.g. a super admin) is signed out, as everywhere else.
+ */
+export function WelcomeRoute({ children }: { children: ReactNode }) {
+  const { ready, session, role, roleLoading } = useAuth();
+  if (!ready || roleLoading) return <AuthLoading />;
+  if (session && role) return <Navigate to={homeFor(role)} replace />;
+  if (session) return <SignOutMissingProfile />;
+  return <>{children}</>;
+}
+
+/** Legacy entry points: the user's own home, or /login when signed out. */
 export function RoleHomeRedirect() {
   const { ready, session, role, roleLoading } = useAuth();
   if (!ready || roleLoading) return <AuthLoading />;

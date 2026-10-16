@@ -13,6 +13,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { BrandLogo } from "./BrandLogo";
 import { subscribeToTable } from "../../lib/realtime";
 import { ProfileButton } from "./ProfileButton";
 import { useMyDisplayName } from "../../lib/profile";
@@ -261,11 +262,14 @@ export function BarangayAdminDashboard() {
       <div className="bg-background px-6 pt-6 pb-2">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-2">
-            <div>
-              <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Barangay Admin - {selectedBarangay ?? "Loading..."}</h1>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                Barangay Management Dashboard
-              </p>
+            <div className="flex items-center gap-3">
+              <BrandLogo size={44} />
+              <div>
+                <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Barangay Admin - {selectedBarangay ?? "Loading..."}</h1>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  Barangay Management Dashboard
+                </p>
+              </div>
             </div>
             <ProfileButton name={myDisplayName} />
             <button className="clay-btn clay-btn-secondary">

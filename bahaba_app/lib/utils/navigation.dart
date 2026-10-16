@@ -4,8 +4,8 @@ import '../models/user_model.dart';
 import '../screens/admin/admin_selection_screen.dart';
 import '../screens/admin/barangay_dashboard_screen.dart';
 import '../screens/admin/mdrrmo_dashboard_screen.dart';
-import '../screens/login_screen.dart';
 import '../screens/resident/main_shell.dart';
+import '../screens/welcome_screen.dart';
 import '../services/push_notification_service.dart';
 
 /// Central navigation helper. Routes users to the correct home screen
@@ -40,10 +40,21 @@ class AppNavigator {
     );
   }
 
-  static void goToLogin(BuildContext context) {
+  /// After logout (or any signed-out state): the Welcome screen as the only route.
+  static void goToWelcome(BuildContext context) {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       (route) => false,
     );
+  }
+
+  /// Back from Login: pop to Welcome, or open it if Login is the only route.
+  static void backToWelcome(BuildContext context) {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      goToWelcome(context);
+    }
   }
 }

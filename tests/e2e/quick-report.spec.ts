@@ -90,15 +90,43 @@ async function fillMinimal(page: Page) {
 }
 
 test.describe("Quick Report (public)", () => {
-  test("login page links to Quick Report and shows the hotlines with numbers", async ({ page, context }) => {
+  test("Welcome page: logo, heading, hotlines with numbers, footer, and each button's target", async ({ page, context }) => {
+    await mockBackend(context);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "BAHAba" })).toBeVisible();
+    await expect(page.getByText("Flood early warning and community reports for Odiongan")).toBeVisible();
+    await expect(page.locator("main img").first()).toBeVisible(); // logo (Vite may inline it as a data: URL)
+    await expect(page.locator('a[href="tel:+639190798427"]')).toHaveText(/Call MDRRMO\s*\+63 919 079 8427/);
+    await expect(page.locator('a[href="tel:911"]')).toHaveText(/Call 911/);
+    await expect(page.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/terms");
+    await expect(page.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/privacy");
+
+    // Fits a phone screen without scrolling.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    for (const [name, target] of [
+      ["Log in", /\/login$/],
+      ["Create an account", /\/register$/],
+      [/Quick Report - no account needed/, /\/quick-report$/],
+    ] as const) {
+      await page.goto("/");
+      await page.getByRole("button", { name }).click();
+      await expect(page).toHaveURL(target);
+      await page.getByRole("link", { name: "Back" }).or(page.getByRole("button", { name: "Back" })).first().click();
+      await expect(page).toHaveURL(/\/$/);
+    }
+  });
+
+  test("login page no longer has Quick Report or the emergency block", async ({ page, context }) => {
     await mockBackend(context);
     await page.goto("/login");
-    await expect(page.getByText("No account? Report a flood in under a minute.")).toBeVisible();
-    await expect(page.locator('a[href="tel:+639190798427"]')).toHaveText(/Call MDRRMO \+63 919 079 8427/);
-    await expect(page.locator('a[href="tel:911"]')).toHaveText(/Call 911/);
-    await page.getByRole("button", { name: "Quick Report", exact: true }).click();
-    await expect(page).toHaveURL(/\/quick-report$/);
-    await expect(page.getByText("In an emergency call 911 or the MDRRMO first.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
+    await expect(page.getByText(/Quick Report/)).toHaveCount(0);
+    await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Back" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "Privacy Policy" })).toBeVisible();
   });
 
   test("validates, sends device_id + honeypot, and shows the success screen", async ({ page, context }) => {

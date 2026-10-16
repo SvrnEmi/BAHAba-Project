@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from "../../lib/supabase";
+import { BrandLogo } from "./BrandLogo";
 import { RainfallForecastPanel } from "./RainfallForecastPanel";
 import { subscribeToTable } from "../../lib/realtime";
 import { useNavigate } from "react-router";
@@ -724,11 +725,14 @@ export function MDRRMOAdminDashboard() {
       <div ref={headerRef} className="bg-background px-6 pt-6 pb-2 lg:sticky lg:top-0 lg:z-30">
         <div className="max-w-7xl lg:max-w-[1660px] mx-auto">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <div>
-              <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>MDRRMO Admin Dashboard</h1>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                Municipal Disaster Risk Reduction & Management Office
-              </p>
+            <div className="flex items-center gap-3">
+              <BrandLogo size={44} />
+              <div>
+                <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>MDRRMO Admin Dashboard</h1>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  Municipal Disaster Risk Reduction & Management Office
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => navigate("/admin/mdrrmo/settings")} className="clay-btn clay-btn-secondary">

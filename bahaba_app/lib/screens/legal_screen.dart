@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../theme/app_theme.dart';
 import '../utils/simple_markdown.dart';
 import '../widgets/clay_container.dart';
+import '../widgets/brand_logo.dart';
 
 enum LegalDocument { terms, privacy }
 
@@ -25,7 +26,7 @@ class LegalScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(_title)),
+      appBar: AppBar(title: BrandAppBarTitle(child: Text(_title))),
       body: SafeArea(
         child: FutureBuilder<String>(
           future: rootBundle.loadString(_asset),

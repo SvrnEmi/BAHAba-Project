@@ -8,6 +8,7 @@ import '../services/quick_report_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay_container.dart';
 import '../widgets/hotline_buttons.dart';
+import '../widgets/brand_logo.dart';
 import 'legal_screen.dart';
 import 'register_screen.dart';
 
@@ -64,7 +65,7 @@ class _QuickReportScreenState extends State<QuickReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Quick Report')),
+      appBar: AppBar(title: const BrandAppBarTitle(child: Text('Quick Report'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),

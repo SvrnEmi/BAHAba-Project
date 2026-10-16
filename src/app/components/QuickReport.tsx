@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Camera, CheckCircle2, Loader, LocateFixed, Phone, Trash2, Waves } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, Loader, LocateFixed, Phone, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { BrandLogo } from "./BrandLogo";
 import {
   EMERGENCY_HOTLINE,
   FALLBACK_BARANGAYS,
@@ -88,15 +89,15 @@ export function QuickReport() {
       <div className="mb-4 flex items-center gap-2">
         <button
           type="button"
-          onClick={() => navigate("/login")}
-          aria-label="Back to sign in"
+          onClick={() => navigate("/")}
+          aria-label="Back"
           className="clay clay-press flex h-11 w-11 items-center justify-center rounded-full"
           style={{ color: "var(--primary-brand)" }}
         >
           <ArrowLeft size={20} aria-hidden="true" />
         </button>
         <h1 className="flex items-center gap-2 text-xl font-bold" style={{ color: "var(--text-primary)" }}>
-          <Waves size={20} aria-hidden="true" style={{ color: "var(--primary-brand)" }} />
+          <BrandLogo size={32} />
           Quick Report
         </h1>
       </div>

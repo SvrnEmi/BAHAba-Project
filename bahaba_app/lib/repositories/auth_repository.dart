@@ -32,6 +32,10 @@ class AuthRepository {
     if (mappedUser == null) {
       throw AuthException('No profile found for this user.');
     }
+    if (!_hasAppRole(mappedUser)) {
+      await logout();
+      throw AuthException('Not authorized. This account cannot use the BAHAba app.');
+    }
 
     await _saveSession(mappedUser);
     return mappedUser;
@@ -99,8 +103,27 @@ class AuthRepository {
     if (session == null || user == null) return null;
 
     final profile = await _ensureProfile(user);
+    if (profile != null && !_hasAppRole(profile)) {
+      // A stored session for an account without a BAHAba role (e.g. a super
+      // admin): sign out instead of opening the app.
+      await logout();
+      return null;
+    }
     return profile;
   }
+
+  /// Only these profile roles may use the app. Anything else (for example
+  /// "superadmin", which UserRole.fromString would read as resident) is
+  /// rejected rather than defaulted.
+  static const _appRoles = {'resident', 'barangay', 'mdrrmo'};
+
+  /// True only for the profile roles the app supports.
+  static bool isAppRole(String? role) => _appRoles.contains(role?.trim().toLowerCase());
+
+  /// Raw profiles.role per user id, as read by [_ensureProfile].
+  final Map<String?, String?> _rawRoles = {};
+
+  bool _hasAppRole(app_user.User user) => isAppRole(_rawRoles[user.id]);
 
   /// Fetches the profile row for [user], creating it from auth metadata
   /// if it doesn't exist yet (covers users who confirmed their email after
@@ -110,6 +133,7 @@ class AuthRepository {
         await _client.from('profiles').select().eq('id', user.id).maybeSingle();
 
     if (existing != null) {
+      _rawRoles[user.id] = (existing['role'] as String?)?.trim().toLowerCase();
       return app_user.User.fromMap(existing);
     }
 
@@ -127,6 +151,7 @@ class AuthRepository {
         .select()
         .single();
 
+    _rawRoles[user.id] = (created['role'] as String?)?.trim().toLowerCase();
     return app_user.User.fromMap(created);
   }
 

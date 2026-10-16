@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Waves, User, Mail, Lock, Eye, EyeOff, Phone, MapPin } from "lucide-react";
+import { User, Mail, Lock, Eye, EyeOff, Phone, MapPin } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
-import { ClayLogoBadge } from "./clay/Clay";
+import { BrandLogo } from "./BrandLogo";
+import { BackToWelcome } from "./BackToWelcome";
 
 export function Register() {
   const navigate = useNavigate();
@@ -105,17 +106,17 @@ export function Register() {
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-background">
-      <div className="px-6 py-10">
+      <div className="px-6 pt-4 pb-10">
+        <div className="mb-6">
+          <BackToWelcome />
+        </div>
         <div className="flex items-center mb-8">
-          <button onClick={() => navigate("/login")} aria-label="Back to sign in" className="clay clay-press mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl" style={{ color: "var(--primary-brand)" }}>
-            ←
-          </button>
           <div>
             <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Create Account</h1>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Join the BAHAba community</p>
           </div>
           <div className="ml-auto">
-            <ClayLogoBadge size={64} icon={Waves} />
+            <BrandLogo size={64} />
           </div>
         </div>
 

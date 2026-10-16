@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/navigation.dart';
-import '../widgets/clay_container.dart';
-import 'login_screen.dart';
+import '../widgets/brand_logo.dart';
+import 'welcome_screen.dart';
 import 'permissions_screen.dart';
 
 /// Splash / onboarding screen. Shows the BAHAba branding, then routes
@@ -59,14 +59,14 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
-  /// Existing post-splash routing: home if a session exists, else login.
+  /// Post-splash routing: home if a session exists, else the Welcome screen.
   static void _routeAfterSplash(BuildContext context) {
     final appState = context.read<AppState>();
     if (appState.isLoggedIn) {
       AppNavigator.goHome(context, appState.role!);
     } else {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       );
     }
   }
@@ -83,7 +83,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // Logo
-                  const ClayLogoBadge(size: 132, iconSize: 64),
+                  const BrandLogo(size: 132),
                   const SizedBox(height: 28),
                   Text('BAHAba', style: AppText.heading(size: 40)),
                   const SizedBox(height: 8),

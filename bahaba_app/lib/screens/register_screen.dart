@@ -7,6 +7,8 @@ import '../repositories/auth_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/navigation.dart';
 import '../widgets/clay_container.dart';
+import '../widgets/brand_logo.dart';
+import 'login_screen.dart';
 
 /// Registration screen — creates a resident account in the local DB.
 class RegisterScreen extends StatefulWidget {
@@ -92,7 +94,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Create Account'),
+        title: const BrandAppBarTitle(child: Text('Create Account')),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -102,7 +104,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Center(child: ClayLogoBadge(size: 84, iconSize: 38)),
+                const Center(child: BrandLogo(size: 84)),
                 const SizedBox(height: 14),
                 const Text(
                   'Join the BAHAba community',
@@ -268,7 +270,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           color: AppColors.textSecondary, fontSize: 14),
                     ),
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      // Opened from Welcome or Login: always land on Login.
+                      onPressed: () => Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      ),
                       child: const Text('Sign In'),
                     ),
                   ],

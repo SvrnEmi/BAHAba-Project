@@ -7,9 +7,8 @@ import '../repositories/auth_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/navigation.dart';
 import '../widgets/clay_container.dart';
-import '../widgets/hotline_buttons.dart';
+import '../widgets/brand_logo.dart';
 import 'admin/admin_selection_screen.dart';
-import 'quick_report_screen.dart';
 import 'register_screen.dart';
 
 /// Login screen with local DB authentication.
@@ -104,9 +103,18 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 8),
+                // Back to the Welcome screen
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => AppNavigator.backToWelcome(context),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Back'),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 // Logo + header
-                const Center(child: ClayLogoBadge()),
+                const Center(child: BrandLogo(size: 104)),
                 const SizedBox(height: 20),
                 Text(
                   'Welcome Back',
@@ -260,48 +268,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
                   },
                   child: const Text('Create Account'),
-                ),
-                const SizedBox(height: 24),
-
-                // Quick Report: no account needed (same as the web login page)
-                ClayContainer(
-                  borderRadius: 24,
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Quick Report - no account needed', style: AppText.heading(size: 17)),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'No account? Report a flood in under a minute.',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                      const SizedBox(height: 14),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const QuickReportScreen()),
-                        ),
-                        icon: const Icon(Icons.water),
-                        label: const Text('Quick Report'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Emergency hotlines
-                ClayContainer(
-                  borderRadius: 24,
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Emergency', style: AppText.heading(size: 17)),
-                      const SizedBox(height: 12),
-                      const HotlineButtons(),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 24),
 

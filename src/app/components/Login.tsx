@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Waves, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { parseRole, useAuth } from "../../lib/auth";
-import { ClayLogoBadge } from "./clay/Clay";
-import { HotlineButtons } from "./QuickReport";
+import { BrandLogo } from "./BrandLogo";
+import { LegalFooter } from "./LegalFooter";
+import { BackToWelcome } from "./BackToWelcome";
 
 const getFriendlyAuthError = (error: unknown) => {
   const rawMessage = error instanceof Error ? error.message : String(error ?? "");
@@ -130,10 +131,13 @@ export function Login() {
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-background flex flex-col">
-      <div className="flex-1 flex flex-col justify-center px-6 py-10">
+      <div className="px-6 pt-4">
+        <BackToWelcome />
+      </div>
+      <div className="flex-1 flex flex-col justify-center px-6 pb-8">
         <div className="flex flex-col items-center mb-8">
           <div className="mb-5">
-            <ClayLogoBadge size={104} icon={Waves} />
+            <BrandLogo size={104} />
           </div>
           <h1 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>Welcome Back</h1>
           <p className="text-center" style={{ color: "var(--text-secondary)" }}>Sign in to access BAHAba</p>
@@ -260,22 +264,7 @@ export function Login() {
           </button>
         </div>
 
-        <section className="clay mt-6 space-y-3 p-5" style={{ borderRadius: 28 }} aria-labelledby="quick-report-title">
-          <h2 id="quick-report-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
-            Quick Report
-          </h2>
-          <p style={{ color: "var(--text-secondary)" }}>No account? Report a flood in under a minute.</p>
-          <button type="button" onClick={() => navigate("/quick-report")} className="clay-btn clay-btn-primary w-full">
-            Quick Report
-          </button>
-        </section>
-
-        <section className="clay mt-4 space-y-3 p-5" style={{ borderRadius: 28 }} aria-labelledby="emergency-title">
-          <h2 id="emergency-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
-            Emergency
-          </h2>
-          <HotlineButtons compact />
-        </section>
+        <LegalFooter className="mt-6" />
       </div>
     </div>
   );

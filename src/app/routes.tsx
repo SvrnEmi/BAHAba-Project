@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { Navigate, createBrowserRouter } from "react-router";
 import { Layout } from "./components/Layout";
 import { Login } from "./components/Login";
 import { Register } from "./components/Register";
@@ -12,14 +12,15 @@ import { Profile } from "./components/Profile";
 import { QuickReport } from "./components/QuickReport";
 import { LegalPage } from "./components/LegalPage";
 import { MDRRMOSettings } from "./components/settings/MDRRMOSettings";
-import { ProtectedRoute, PublicOnlyRoute, RoleHomeRedirect } from "./components/ProtectedRoute";
+import { ProtectedRoute, PublicOnlyRoute, RoleHomeRedirect, WelcomeRoute } from "./components/ProtectedRoute";
+import { Welcome } from "./components/Welcome";
 import { RESIDENT_ONLY, ROUTE_ROLES } from "../lib/auth";
 
 export const router = createBrowserRouter([
   {
-    // Signed out -> /login; signed in -> the role's own home.
+    // Public Welcome page; signed-in users go straight to their role's home.
     path: "/",
-    element: <RoleHomeRedirect />,
+    element: <WelcomeRoute><Welcome /></WelcomeRoute>,
   },
   {
     path: "/login",
@@ -76,7 +77,8 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    // Unknown URLs: "/" (Welcome when signed out, the role's home when signed in).
     path: "*",
-    element: <RoleHomeRedirect />,
+    element: <Navigate to="/" replace />,
   },
 ]);

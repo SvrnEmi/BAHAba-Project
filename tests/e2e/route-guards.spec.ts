@@ -161,10 +161,25 @@ test.describe("route guards", () => {
     await check();
   });
 
-  test("signed-out visitor opening / goes to login", async ({ page }) => {
+  test("signed-out visitor opening / sees the Welcome page; unknown URLs go to /", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "BAHAba" })).toBeVisible();
+    for (const path of ["/nope", "/does/not/exist"]) {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByRole("heading", { level: 1, name: "BAHAba" })).toBeVisible();
+    }
+  });
+
+  test("signed-in user opening / goes straight to their home", async ({ page }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await login(page, "resident");
+    await expect(page).toHaveURL(/\/home$/);
+    const check = await neverShows(page, "Flood early warning and community reports for Odiongan");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/home$/);
+    await page.waitForLoadState("networkidle");
+    await check();
   });
 
   test("session whose profile is missing is signed out to login with a notice, never given a role", async ({ page }) => {
@@ -214,9 +229,9 @@ test.describe("route guards", () => {
     await expect(page).toHaveURL(/\/home$/);
   });
 
-  test("signed-out: protected and unknown URLs go to login without rendering the page", async ({ page }) => {
+  test("signed-out: protected URLs go to login without rendering the page", async ({ page }) => {
     const check = await neverShows(page, "Barangay Management Dashboard");
-    for (const path of ["/home", "/admin/barangay", "/admin/mdrrmo", "/profile", "/reports?openForm=true", "/nope"]) {
+    for (const path of ["/home", "/admin/barangay", "/admin/mdrrmo", "/profile", "/reports?openForm=true"]) {
       await page.goto(path, { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/\/login$/);
       await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();

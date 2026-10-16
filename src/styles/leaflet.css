@@ -1,0 +1,28 @@
+/* Leaflet CSS - Required for OpenStreetMap */
+@import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+
+/* Custom map styles */
+.leaflet-container {
+  font-family: inherit;
+}
+
+.custom-marker-icon {
+  background-color: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.flood-zone-popup {
+  font-family: inherit;
+}
+
+.flood-zone-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  padding: 0;
+}
+
+.flood-zone-popup .leaflet-popup-content {
+  margin: 0;
+  min-width: 200px;
+}

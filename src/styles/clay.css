@@ -1,0 +1,321 @@
+/*
+ * Claymorphism design tokens and surfaces (mirrors bahaba_app/lib/theme).
+ *
+ * Contrast (WCAG AA, 4.5:1 for normal text):
+ * - White on the mockup button gradient #5A9FDC -> #3B82C4 is 2.9-4.1:1, so
+ *   white-text fills use --primary-strong -> --primary-shade (4.7-6.3:1).
+ * - White on #2E8B57 is 4.3:1, so low-risk fills use --risk-low (#237A4A).
+ * - Amber (#D98E04) always takes dark --ink text (5.4:1); white is 2.7:1.
+ * For mockup-exact colors, swap --btn-from/--btn-to and --risk-low back.
+ *
+ * Rules: at most two box-shadows per element, no backdrop-filter, and clay
+ * is never nested (a .clay inside a .clay drops its shadows). Alerts, risk
+ * badges and status badges are always flat.
+ */
+:root {
+  --clay-bg: #eaf1f8;
+  --clay-light: #fbfdff;
+  --clay-dark: #e8eff8;
+  --clay-shade: rgb(118 146 184 / 0.38);
+  --clay-highlight: rgb(255 255 255 / 0.95);
+  --clay-gradient: linear-gradient(to bottom right, var(--clay-light), var(--clay-dark));
+  --clay-shadow: 8px 8px 18px var(--clay-shade), -6px -6px 14px var(--clay-highlight);
+  --clay-shadow-pressed: 3px 3px 8px var(--clay-shade), -3px -3px 8px var(--clay-highlight);
+  --clay-inset: inset 3px 3px 6px var(--clay-shade), inset -3px -3px 6px var(--clay-highlight);
+
+  --primary-brand: #3b82c4;
+  --primary-light: #5a9fdc;
+  --primary-strong: #3577b7;
+  --primary-shade: #2a62a0;
+  --btn-from: var(--primary-strong);
+  --btn-to: var(--primary-shade);
+  --btn-shadow: 6px 6px 14px rgb(42 98 160 / 0.38), -4px -4px 10px rgb(255 255 255 / 0.9);
+  --btn-shadow-pressed: 3px 3px 8px rgb(42 98 160 / 0.38), -3px -3px 8px rgb(255 255 255 / 0.9);
+
+  --text-primary: #1e2a38;
+  --text-secondary: #55657a;
+  --nav-well: #dce8f5;
+
+  --peach: #ffd9c7;
+  --peach-icon: #9a4a24;
+  --mint: #cdefe0;
+  --mint-icon: #1f6b4c;
+  --lavender: #dcd6f7;
+  --lavender-icon: #4c3fa8;
+
+  --risk-medium-text: #8a5a00;
+
+  /* Latest-report card. White on the sketch teal #0a93ae is 3.6:1, so the
+     card uses a darker teal (5.0:1). Swap to #0a93ae for the exact sketch. */
+  --report-teal: #087a90;
+}
+
+@layer components {
+
+/* ---------- Surfaces ---------- */
+
+.clay {
+  background: var(--clay-gradient);
+  border-radius: 24px;
+  box-shadow: var(--clay-shadow);
+}
+
+/* Never nest clay: inner surfaces keep their fill but lose the shadows. */
+.clay .clay,
+.clay .clay-btn-secondary {
+  box-shadow: none;
+}
+.clay .clay-btn-secondary {
+  border: 1px solid var(--border);
+}
+
+.clay-press {
+  cursor: pointer;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.clay-press:active {
+  transform: scale(0.97);
+  box-shadow: var(--clay-shadow-pressed);
+}
+.clay-press:focus-visible,
+.clay-btn:focus-visible,
+.clay-nav-item:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+/* ---------- Buttons ---------- */
+
+.clay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 13px 20px;
+  border-radius: 28px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.clay-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+.clay-btn-primary {
+  color: #fff;
+  background: linear-gradient(to bottom right, var(--btn-from), var(--btn-to));
+  box-shadow: var(--btn-shadow);
+}
+.clay-btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: var(--btn-shadow-pressed);
+}
+.clay-btn-secondary {
+  color: var(--text-primary);
+  background: var(--clay-gradient);
+  box-shadow: var(--clay-shadow);
+}
+.clay-btn-secondary svg {
+  color: var(--primary-brand);
+}
+.clay-btn-secondary:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: var(--clay-shadow-pressed);
+}
+.clay-btn-danger {
+  color: var(--risk-high);
+  background: var(--clay-gradient);
+  border: 1.5px solid var(--risk-high);
+  box-shadow: var(--clay-shadow);
+}
+
+/* ---------- Inputs (pressed into the card) ---------- */
+
+.clay-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: #eff4fa;
+  color: var(--text-primary);
+  box-shadow: inset 2px 2px 4px rgb(118 146 184 / 0.25);
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.clay-input::placeholder {
+  color: var(--text-secondary);
+}
+.clay-input:focus {
+  border-color: var(--primary-brand);
+  box-shadow: 0 0 0 1px var(--primary-brand), inset 2px 2px 4px rgb(118 146 184 / 0.25);
+}
+.clay-input.has-icon-left { padding-left: 44px; }
+.clay-input.has-icon-right { padding-right: 48px; }
+
+.clay-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- Pressed-in well (selected nav item, selected tab) ---------- */
+
+.clay-well {
+  background: linear-gradient(to bottom right, #ccdbec, #e6eff9);
+  box-shadow: var(--clay-inset);
+}
+
+/* ---------- Bottom nav ---------- */
+
+.clay-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  color: var(--text-secondary);
+  transition: background 120ms;
+}
+.clay-nav-item[aria-current="page"] {
+  color: var(--primary-brand);
+  background: linear-gradient(to bottom right, #ccdbec, #e6eff9);
+  box-shadow: var(--clay-inset);
+}
+
+/* ---------- Tabs (dashboards) ---------- */
+
+.clay-tab {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.clay-tab[aria-selected="true"],
+.clay-tab.is-active {
+  color: var(--primary-shade);
+  background: linear-gradient(to bottom right, #ccdbec, #e6eff9);
+  box-shadow: var(--clay-inset);
+}
+
+/* ---------- Flat, high-contrast UI (never clay) ---------- */
+
+.flat-alert {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--alert-color, var(--primary-shade));
+  border-radius: 0;
+  padding: 14px;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.risk-badge.is-compact { padding: 3px 8px; gap: 4px; font-size: 11px; }
+.risk-badge-low { background: var(--risk-low); color: #fff; }
+.risk-badge-medium { background: var(--risk-medium); color: var(--text-primary); }
+.risk-badge-high { background: var(--risk-high); color: #fff; }
+.risk-badge-info { background: var(--primary-shade); color: #fff; }
+.risk-badge-neutral { background: var(--text-secondary); color: #fff; }
+
+/* ---------- Map: live user location ---------- */
+
+.user-location {
+  position: relative;
+}
+.user-location-pulse,
+.user-location-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+}
+.user-location-pulse {
+  background: rgb(59 130 196 / 0.45);
+  animation: user-location-pulse 2s ease-out infinite;
+}
+.user-location-dot {
+  background: #3b82c4;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(30 42 56 / 0.35);
+}
+@keyframes user-location-pulse {
+  from { transform: scale(1); opacity: 0.8; }
+  to { transform: scale(3); opacity: 0; }
+}
+
+/* ---------- Reduced motion: no squish ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .clay-press,
+  .clay-btn,
+  .clay-nav-item,
+  .clay-input {
+    transition: none;
+  }
+  .user-location-pulse {
+    animation: none;
+    opacity: 0;
+  }
+  .clay-press:active,
+  .clay-btn-primary:active:not(:disabled),
+  .clay-btn-secondary:active:not(:disabled) {
+    transform: none;
+  }
+}
+}
+
+/* ---------- MDRRMO Recent updates ---------- */
+
+@layer components {
+  .update-item-new {
+    animation: update-slide-in 300ms ease-out, update-highlight 1.5s ease-out;
+  }
+  .update-target-flash {
+    animation: update-flash 1.5s ease-out;
+  }
+  .live-dot {
+    animation: live-dot-pulse 2s ease-in-out infinite;
+  }
+}
+@keyframes update-slide-in {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes update-highlight {
+  from { background: rgb(59 130 196 / 0.18); }
+  to { background: transparent; }
+}
+@keyframes update-flash {
+  from { box-shadow: 0 0 0 3px var(--primary-brand); }
+  to { box-shadow: 0 0 0 3px transparent; }
+}
+@keyframes live-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No movement: a static highlight for the same 1.5 s instead. */
+  .update-item-new { animation: none; background: rgb(59 130 196 / 0.12); }
+  .update-target-flash { animation: none; box-shadow: 0 0 0 3px var(--primary-brand); }
+  .live-dot { animation: none; }
+}

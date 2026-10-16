@@ -1,0 +1,9 @@
+# Only the Vite web app is deployed; never upload secrets or the Flutter app.
+.env
+.env.*
+bahaba_app/
+node_modules/
+dist/
+playwright-report/
+test-results/
+*.log

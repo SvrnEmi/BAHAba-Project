@@ -32,6 +32,8 @@ import {
 } from "../../lib/profile";
 import { MDRRMO_ODIONGAN_NUMBER, NATIONAL_EMERGENCY_NUMBER, barangayHallNumber } from "../../lib/emergencyContacts";
 import { waterLevelLabel } from "../../lib/reports";
+import { useLatestMessages } from "../../lib/reportMessages";
+import { ReportMessages } from "./ReportMessages";
 
 type ProfileRow = {
   name: string;
@@ -246,6 +248,7 @@ export function Profile() {
               onToggle={toggle}
             >
               <MyReports
+                userId={userId}
                 name={profile.name}
                 email={email}
                 active={openSection === "reports"}
@@ -677,11 +680,13 @@ const STATUS_BADGE: Record<string, { label: string; className: string; icon: typ
 
 /** Loads only once the section is first opened (`active`). One-shot read, no realtime. */
 function MyReports({
+  userId,
   name,
   email,
   active,
   onLoaded,
 }: {
+  userId: string | null;
   name: string;
   email: string;
   active: boolean;
@@ -690,6 +695,7 @@ function MyReports({
   const [requested, setRequested] = useState(false);
   const [reports, setReports] = useState<MyReport[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const { latest, update: updateLatest } = useLatestMessages(reports?.map((r) => r.id) ?? []);
 
   useEffect(() => {
     if (active) setRequested(true);
@@ -756,12 +762,14 @@ function MyReports({
                 Reason: {report.rejection_reason}
               </p>
             )}
-            {report.admin_reply?.trim() && (
-              <div className="mt-2 border-l-4 pl-2" style={{ borderColor: "var(--primary-shade)" }}>
-                <p className="text-xs font-semibold" style={{ color: "var(--primary-shade)" }}>Reply from MDRRMO</p>
-                <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>{report.admin_reply}</p>
-              </div>
-            )}
+            <ReportMessages
+              reportId={report.id}
+              viewerRole="resident"
+              userId={userId}
+              latest={latest[report.id]}
+              onLatest={updateLatest}
+              legacyReply={{ body: report.admin_reply, at: report.admin_reply_at }}
+            />
           </li>
         );
       })}

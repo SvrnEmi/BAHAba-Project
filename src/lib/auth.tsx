@@ -27,6 +27,7 @@ export const ROUTE_ROLES: Record<string, readonly Role[]> = {
   // MDRRMO has no profile page; its dashboard header has its own Log out button.
   "/profile": ["resident", "barangay"],
   "/admin/barangay": ["barangay"],
+  "/admin/barangay/settings": ["barangay"],
   "/admin/mdrrmo": ["mdrrmo"],
   "/admin/mdrrmo/settings": ["mdrrmo"],
 };

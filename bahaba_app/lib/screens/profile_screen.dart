@@ -16,6 +16,7 @@ import '../widgets/clay_button.dart';
 import '../widgets/clay_container.dart';
 import '../widgets/flat_status_card.dart';
 import '../widgets/profile_avatar_button.dart';
+import '../widgets/report_messages_section.dart';
 import '../widgets/report_status_badge.dart';
 import '../widgets/risk_badge.dart';
 import '../widgets/brand_logo.dart';
@@ -797,6 +798,7 @@ class _MyReportsState extends State<_MyReports> {
       children: [
         for (final report in reports)
           Padding(
+            key: ValueKey(report.id),
             padding: const EdgeInsets.only(bottom: 10),
             child: _MyReportItem(report: report),
           ),
@@ -812,7 +814,6 @@ class _MyReportItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reason = report.rejectionReason?.trim() ?? '';
-    final reply = report.adminReply?.trim() ?? '';
     return FlatPanel(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -854,28 +855,12 @@ class _MyReportItem extends StatelessWidget {
                     fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
-          if (reply.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: FlatStatusCard(
-                accent: AppColors.primaryShade,
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Reply from MDRRMO',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primaryShade,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(reply, style: const TextStyle(fontSize: 13)),
-                  ],
-                ),
-              ),
+          if (report.id != null)
+            // The thread also shows the old single reply as its first message.
+            ReportMessagesSection(
+              reportId: report.id!,
+              legacyReply: report.adminReply,
+              legacyReplyAt: report.adminReplyAt,
             ),
         ],
       ),

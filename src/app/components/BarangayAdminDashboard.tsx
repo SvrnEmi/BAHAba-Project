@@ -1,639 +1,600 @@
-import { useEffect, useState } from "react";
-import {
-  Bell,
-  MapPin,
-  Activity,
-  Settings,
-  AlertTriangle,
-  Send,
-  Eye,
-  Users,
-  Droplets,
-  Clock,
-  CheckCircle,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useNavigate } from "react-router";
+import { LogOut, Settings } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { BrandLogo } from "./BrandLogo";
+import { useAuth } from "../../lib/auth";
 import { subscribeToTable } from "../../lib/realtime";
-import { ProfileButton } from "./ProfileButton";
-import { useMyDisplayName } from "../../lib/profile";
+import { displayReporterName, waterLevelLabel } from "../../lib/reports";
+import { waterLevelInfo } from "../../lib/quickReport";
+import { errorMessage, legacyCreatedBy, notifyBrowser, toTime } from "../../lib/barangayAdmin";
+import { BrandLogo } from "./BrandLogo";
+import {
+  BarangayStatusPanel,
+  HOUR_MS,
+  MY_BARANGAY_COLUMNS,
+  sourceText,
+  toForecastHour,
+  toMyBarangay,
+  type ForecastHour,
+  type MyBarangayRow,
+} from "./barangay/BarangayStatusPanel";
+import { BarangayUpdatesBar, BarangayUpdatesColumn, FEED_LIMIT, useFeedState, type BarangayUpdate } from "./barangay/BarangayUpdatesPanel";
+import {
+  CommunityReportsSection,
+  QuickReportsSection,
+  QUICK_REPORT_COLUMNS,
+  REPORT_COLUMNS,
+  isApprovedStatus,
+  type BarangayQuickReport,
+  type BarangayReport,
+  type ReportFilter,
+} from "./barangay/BarangayReports";
+import { ALERT_COLUMNS, BarangayAlertsSection, toAlert, type BarangayAlertRow } from "./barangay/BarangayAlerts";
 
-type AlertLevel = "advisory" | "warning" | "critical";
-type FloodRisk = "low" | "medium" | "high";
+/*
+ * Barangay admin dashboard. Everything is scoped to the signed-in admin's own
+ * barangay (profiles.barangay). One shared realtime channel per table
+ * (barangays, community_reports, alerts, quick_reports) feeds the status
+ * panel, the lists and the Recent updates column; no polling.
+ */
 
-const floodRiskConfig: Record<FloodRisk, { label: string; badge: string; button: string }> = {
-  low: {
-    label: "Low Risk",
-    badge: "bg-green-100 text-green-700",
-    button: "border-green-500 bg-green-50 text-green-700",
-  },
-  medium: {
-    label: "Medium Risk",
-    badge: "bg-amber-100 text-amber-700",
-    button: "border-amber-500 bg-amber-50 text-amber-700",
-  },
-  high: {
-    label: "High Risk",
-    badge: "bg-red-100 text-red-700",
-    button: "border-red-500 bg-red-50 text-red-700",
-  },
-};
+type Tab = "reports" | "alerts";
+type ReportsView = "community" | "quick";
+type Profile = { name: string | null; barangay: string | null };
+type LevelEvent = { key: string; time: number; level: string; source: string };
 
-interface BarangayAlert {
-  id: number;
-  level: AlertLevel;
-  title: string;
-  message: string;
-  timestamp: string;
-  status: "pending" | "approved" | "rejected";
-  verifiedBy?: string;
-  rejectionReason?: string;
-  targetBarangay: string;
+const LEVEL_LABEL: Record<string, string> = { low: "Low risk", medium: "Medium risk", high: "High risk" };
+
+function levelEventFrom(row: MyBarangayRow, time: number): LevelEvent | null {
+  if (!time || !row.flood_risk) return null;
+  return { key: `level-${time}-${row.flood_risk}-${row.risk_source ?? ""}`, time, level: row.flood_risk, source: sourceText(row) };
 }
-
-interface CommunityReport {
-  id: number;
-  user_name: string;
-  location: string;
-  lat: number | null;
-  lng: number | null;
-  water_level: string;
-  description: string;
-  timestamp: string;
-  status: string;
-  photo_path: string | null;
-}
-
-const STAT_PASTELS = ["lavender", "peach", "mint"] as const;
 
 export function BarangayAdminDashboard() {
-  const myDisplayName = useMyDisplayName();
-  const [activeTab, setActiveTab] = useState("overview");
-  const [showNotification, setShowNotification] = useState(false);
-  const [selectedBarangay, setSelectedBarangay] = useState<string | null>(null);
-  const [floodRisk, setFloodRisk] = useState<FloodRisk | null>(null);
-  const [floodRiskLastUpdate, setFloodRiskLastUpdate] = useState<string | null>(null);
-  const [myAlerts, setMyAlerts] = useState<BarangayAlert[]>([]);
-  const [communityReports, setCommunityReports] = useState<CommunityReport[]>([]);
-  const [residentCount, setResidentCount] = useState(0);
+  const navigate = useNavigate();
+  const { session, signOut } = useAuth();
+  const userId = session?.user.id ?? null;
+  const email = session?.user.email ?? null;
 
-  const [newAlert, setNewAlert] = useState({
-    level: "advisory" as AlertLevel,
-    title: "",
-    message: "",
-  });
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const barangay = profile?.barangay ?? null;
+
+  const [row, setRow] = useState<MyBarangayRow | null>(null);
+  const [hours, setHours] = useState<ForecastHour[]>([]);
+  const [overrideHours, setOverrideHours] = useState<number | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [levelEvents, setLevelEvents] = useState<LevelEvent[]>([]);
+
+  const [reports, setReports] = useState<BarangayReport[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsError, setReportsError] = useState<string | null>(null);
+  const [quick, setQuick] = useState<BarangayQuickReport[]>([]);
+  const [quickLoading, setQuickLoading] = useState(true);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<BarangayAlertRow[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  // When this session saw a draft get reviewed (the table has no review time).
+  const [reviewedAt, setReviewedAt] = useState<Record<string, number>>({});
+
+  const [tab, setTab] = useState<Tab>("reports");
+  const [reportsView, setReportsView] = useState<ReportsView>("community");
+  const [reportFilter, setReportFilter] = useState<ReportFilter>("pending");
+  const [focusTarget, setFocusTarget] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [loggingOut, setLoggingOut] = useState(false);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  // 1. Profile (name + barangay), once per user.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    void supabase
+      .from("profiles")
+      .select("name, barangay")
+      .eq("id", userId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) setProfileError(error.message);
+        else
+          setProfile({
+            name: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : null,
+            barangay: typeof data?.barangay === "string" && data.barangay.trim() ? data.barangay.trim() : null,
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const myName = profile?.name ?? email ?? (barangay ? legacyCreatedBy(barangay) : "Barangay Admin");
+
+  // Clock for relative times and the current-hour bar (no data requests).
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Header height drives the sticky Recent updates column's offset.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => setHeaderHeight(el.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [barangay]);
+
+  // 2. Loaders (all scoped to my barangay).
+  const loadForecast = useCallback(async (barangayId: number) => {
+    const start = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
+    const { data, error } = await supabase
+      .from("rainfall_forecast")
+      .select("hour, precip_mm, precip_prob, is_simulated")
+      .eq("barangay_id", barangayId)
+      .gte("hour", new Date(start).toISOString())
+      .lt("hour", new Date(start + 24 * HOUR_MS).toISOString())
+      .order("hour", { ascending: true });
+    if (error) throw error;
+    setHours(((data ?? []) as Record<string, unknown>[]).map(toForecastHour).filter((h) => h.t > 0));
+  }, []);
+
+  const loadStatus = useCallback(async () => {
+    if (!barangay) return;
+    setStatusError(null);
+    try {
+      const [barangayRes, settingsRes] = await Promise.all([
+        supabase.from("barangays").select(MY_BARANGAY_COLUMNS).eq("name", barangay).maybeSingle(),
+        supabase.from("risk_settings").select("override_hours").eq("id", 1).maybeSingle(),
+      ]);
+      if (barangayRes.error) throw barangayRes.error;
+      const next = barangayRes.data ? toMyBarangay(barangayRes.data as Record<string, unknown>) : null;
+      setRow(next);
+      const hoursValue = Number((settingsRes.data as { override_hours?: unknown } | null)?.override_hours);
+      setOverrideHours(Number.isFinite(hoursValue) && hoursValue > 0 ? hoursValue : null);
+      if (next) {
+        const event = levelEventFrom(next, toTime(next.last_update));
+        if (event) setLevelEvents((current) => (current.some((e) => e.key === event.key) ? current : [event, ...current]));
+        await loadForecast(next.id);
+      }
+    } catch (err) {
+      setStatusError(errorMessage(err, "Unable to load the status."));
+    } finally {
+      setStatusLoading(false);
+    }
+  }, [barangay, loadForecast]);
+
+  const loadReports = useCallback(async () => {
+    if (!barangay) return;
+    setReportsError(null);
+    const { data, error } = await supabase
+      .from("community_reports")
+      .select(REPORT_COLUMNS)
+      .eq("barangay", barangay)
+      .order("timestamp", { ascending: false })
+      .limit(200);
+    if (error) setReportsError(error.message);
+    else setReports((data ?? []) as unknown as BarangayReport[]);
+    setReportsLoading(false);
+  }, [barangay]);
+
+  const knownQuickIds = useRef<Set<string> | null>(null);
+  const loadQuick = useCallback(async () => {
+    if (!barangay) return;
+    setQuickError(null);
+    const { data, error } = await supabase
+      .from("quick_reports")
+      .select(QUICK_REPORT_COLUMNS)
+      .eq("barangay", barangay)
+      .eq("status", "approved")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) {
+      setQuickError(error.message);
+    } else {
+      const rows = (data ?? []) as unknown as BarangayQuickReport[];
+      // Notify about Quick Reports that became visible after the first load.
+      if (knownQuickIds.current) {
+        for (const r of rows) {
+          if (!knownQuickIds.current.has(String(r.id))) {
+            notifyBrowser(`New Quick Report - ${barangay}`, `${waterLevelInfo(r.water_level)?.label ?? "Water level"}${r.landmark ? ` near ${r.landmark}` : ""}`);
+          }
+        }
+      }
+      knownQuickIds.current = new Set(rows.map((r) => String(r.id)));
+      setQuick(rows);
+    }
+    setQuickLoading(false);
+  }, [barangay]);
+
+  const loadAlerts = useCallback(async () => {
+    if (!barangay) return;
+    setAlertsError(null);
+    const { data, error } = await supabase
+      .from("alerts")
+      .select(ALERT_COLUMNS)
+      .eq("target_barangay", barangay)
+      .order("sent_at", { ascending: false })
+      .limit(100);
+    if (error) setAlertsError(error.message);
+    else setAlerts(((data ?? []) as Record<string, unknown>[]).map(toAlert));
+    setAlertsLoading(false);
+  }, [barangay]);
+
+  // 3. Initial load + one shared realtime channel per table.
+  const rowRef = useRef<MyBarangayRow | null>(null);
+  rowRef.current = row;
+  const alertsRef = useRef<BarangayAlertRow[]>([]);
+  alertsRef.current = alerts;
 
   useEffect(() => {
+    if (!barangay) return;
     let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
+    let quickTimer: number | undefined;
 
-    const loadData = async () => {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+    void loadStatus();
+    void loadReports();
+    void loadQuick();
+    void loadAlerts();
 
-      if (userError || !user) {
-        alert("Unable to identify the signed-in Barangay administrator.");
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("barangay")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError || !profile?.barangay) {
-        alert(profileError?.message ?? "Your profile has no assigned Barangay.");
-        return;
-      }
-
-      const myBarangayName = profile.barangay;
-      if (cancelled) return;
-      setSelectedBarangay(myBarangayName);
-
-      const { data: barangay, error: barangayError } = await supabase
-        .from("barangays")
-        .select("flood_risk, last_update")
-        .eq("name", myBarangayName)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (barangayError) {
-        alert(`Unable to load flood risk: ${barangayError.message}`);
-      } else if (barangay) {
-        setFloodRisk(barangay.flood_risk as FloodRisk);
-        setFloodRiskLastUpdate(barangay.last_update);
-      }
-
-      const [{ data: alertData }, { data: reportData }, { count }] = await Promise.all([
-        supabase.from("alerts").select("*").or(`target_barangay.eq.${myBarangayName},target_barangay.eq.All Barangays`).order("sent_at", { ascending: false }),
-        supabase.from("community_reports").select("*").order("timestamp", { ascending: false }),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("barangay", myBarangayName),
-      ]);
-
-      if (cancelled) return;
-
-      setMyAlerts(((alertData as Array<Record<string, unknown>>) ?? []).map((alert) => ({
-        id: Number(alert.id), level: alert.level as AlertLevel, title: String(alert.title), message: String(alert.message),
-        timestamp: String(alert.sent_at), status: alert.status as BarangayAlert["status"],
-        verifiedBy: alert.status === "approved" ? "MDRRMO Admin" : undefined, targetBarangay: String(alert.target_barangay),
-      })));
-      setCommunityReports((reportData as CommunityReport[]) ?? []);
-      setResidentCount(count ?? 0);
-
-      // Guard against subscribing for a component that has already
-      // unmounted (e.g. fast Vite hot-reload during dev) — an orphaned
-      // subscription here would never be released, since no cleanup
-      // function would ever run to close it.
-      if (cancelled) return;
-
-      // Shared barangays channel; only this admin's barangay is applied.
-      unsubscribe = subscribeToTable("barangays", (payload) => {
-        if (payload.eventType !== "UPDATE") return;
-        const updatedBarangay = payload.new as { name: string; flood_risk: FloodRisk; last_update: string };
-        if (updatedBarangay.name !== myBarangayName) return;
-        setFloodRisk(updatedBarangay.flood_risk);
-        setFloodRiskLastUpdate(updatedBarangay.last_update);
-      });
-    };
-
-    void loadData();
+    const unsubscribers = [
+      subscribeToTable("community_reports", (payload) => {
+        if (cancelled) return;
+        if (payload.eventType === "DELETE") {
+          const id = Number((payload.old as { id?: unknown }).id);
+          setReports((current) => current.filter((r) => r.id !== id));
+          return;
+        }
+        const report = payload.new as unknown as BarangayReport;
+        if (report.barangay !== barangay) {
+          // Moved out of my barangay (or never in it).
+          setReports((current) => current.filter((r) => r.id !== report.id));
+          return;
+        }
+        setReports((current) => [report, ...current.filter((r) => r.id !== report.id)].sort((a, b) => toTime(b.timestamp) - toTime(a.timestamp)));
+        if (payload.eventType === "INSERT") {
+          notifyBrowser(`New flood report - ${barangay}`, `${waterLevelLabel(report.water_level)} at ${report.location?.trim() || "unknown location"}`);
+        }
+      }),
+      subscribeToTable("alerts", (payload) => {
+        if (cancelled) return;
+        if (payload.eventType === "DELETE") {
+          const id = Number((payload.old as { id?: unknown }).id);
+          setAlerts((current) => current.filter((a) => a.id !== id));
+          return;
+        }
+        const alert = toAlert(payload.new as Record<string, unknown>);
+        if (alert.target_barangay !== barangay) return;
+        const before = alertsRef.current.find((a) => a.id === alert.id);
+        if (before && before.status !== alert.status && (alert.status === "approved" || alert.status === "rejected")) {
+          setReviewedAt((current) => ({ ...current, [`${alert.id}-${alert.status}`]: Date.now() }));
+        }
+        setAlerts((current) => [alert, ...current.filter((a) => a.id !== alert.id)].sort((a, b) => toTime(b.sent_at) - toTime(a.sent_at)));
+      }),
+      // Quick Reports: RLS shows only approved rows of my barangay; re-read once per burst.
+      subscribeToTable("quick_reports", () => {
+        window.clearTimeout(quickTimer);
+        quickTimer = window.setTimeout(() => {
+          if (!cancelled) void loadQuick();
+        }, 400);
+      }),
+    ];
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      window.clearTimeout(quickTimer);
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, []);
+  }, [barangay, loadStatus, loadReports, loadQuick, loadAlerts]);
 
-  const updateFloodRisk = async (level: FloodRisk) => {
-    if (!selectedBarangay) {
-      alert("Your profile has no assigned Barangay.");
-      return;
+  // My barangay row only: UPDATEs on a channel filtered to its id (other
+  // barangays' updates never reach this dashboard).
+  const myBarangayId = row?.id ?? null;
+  useEffect(() => {
+    if (myBarangayId == null) return;
+    let cancelled = false;
+    let forecastTimer: number | undefined;
+
+    const channel = supabase
+      .channel(`my-barangay-${myBarangayId}-${Date.now()}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "barangays", filter: `id=eq.${myBarangayId}` },
+        (payload) => {
+          if (cancelled) return;
+          const next = toMyBarangay(payload.new as Record<string, unknown>);
+          const previous = rowRef.current;
+          setRow(next);
+          if (previous && (previous.flood_risk !== next.flood_risk || previous.risk_source !== next.risk_source)) {
+            const event = levelEventFrom(next, toTime(next.last_update) > toTime(previous.last_update) ? toTime(next.last_update) : Date.now());
+            if (event) setLevelEvents((current) => (current.some((e) => e.key === event.key) ? current : [event, ...current].slice(0, FEED_LIMIT)));
+          }
+          // A new automated run (or a simulation) also rewrote rainfall_forecast.
+          if (!previous || previous.auto_updated_at !== next.auto_updated_at || next.risk_source === "simulation") {
+            window.clearTimeout(forecastTimer);
+            forecastTimer = window.setTimeout(() => {
+              if (!cancelled) void loadForecast(next.id).catch((err) => console.error("Unable to reload the forecast:", err));
+            }, 1500);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(forecastTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [myBarangayId, loadForecast]);
+
+  // 4. Derived lists.
+  const isMine = useCallback(
+    (a: BarangayAlertRow) =>
+      a.source !== "auto" &&
+      !!a.created_by &&
+      [profile?.name, email, barangay ? legacyCreatedBy(barangay) : null].filter(Boolean).includes(a.created_by),
+    [profile?.name, email, barangay],
+  );
+  const drafts = useMemo(() => alerts.filter(isMine), [alerts, isMine]);
+  const autoAlerts = useMemo(() => alerts.filter((a) => a.source === "auto"), [alerts]);
+
+  const feed = useMemo<BarangayUpdate[]>(() => {
+    const list: BarangayUpdate[] = [];
+    for (const r of reports) {
+      list.push({
+        key: `report-${r.id}`,
+        kind: "report",
+        title: `New report: ${r.location?.trim() || "Unknown location"}`,
+        detail: `${waterLevelLabel(r.water_level)} · by ${displayReporterName(r.user_name)}`,
+        time: toTime(r.timestamp),
+        target: { tab: "reports", elementId: `report-${r.id}` },
+      });
     }
-
-    const updatedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from("barangays")
-      .update({ flood_risk: level, last_update: updatedAt })
-      .eq("name", selectedBarangay);
-    if (error) {
-      alert(`Unable to update water level: ${error.message}`);
-      return;
+    for (const q of quick) {
+      list.push({
+        key: `quick-${q.id}`,
+        kind: "quick",
+        title: `Quick Report: ${q.landmark?.trim() || "No landmark"}`,
+        detail: `Water: ${waterLevelInfo(q.water_level)?.label ?? "not given"} · approved by MDRRMO`,
+        time: toTime(q.created_at),
+        target: { tab: "reports", elementId: `quick-report-${q.id}` },
+      });
     }
+    for (const a of alerts) {
+      if (a.source === "auto") {
+        list.push({
+          key: `auto-${a.id}`,
+          kind: "auto",
+          title: a.title || "Automated warning",
+          detail: a.status === "approved" ? "Automated warning sent" : `Automated warning · ${a.status}`,
+          time: toTime(a.sent_at),
+          target: { tab: "alerts", elementId: `alert-${a.id}` },
+        });
+      } else if (isMine(a) && (a.status === "approved" || a.status === "rejected")) {
+        const approved = a.status === "approved";
+        list.push({
+          key: `draft-${a.id}-${a.status}`,
+          kind: approved ? "approved" : "rejected",
+          title: `${approved ? "Alert approved" : "Alert rejected"}: ${a.title || "Alert"}`,
+          detail: approved ? "Sent to residents by MDRRMO" : `Reason: ${a.rejection_reason?.trim() || "No reason given"}`,
+          time: reviewedAt[`${a.id}-${a.status}`] ?? toTime(a.sent_at),
+          target: { tab: "alerts", elementId: `alert-${a.id}` },
+        });
+      }
+    }
+    for (const e of levelEvents) {
+      list.push({
+        key: e.key,
+        kind: "level",
+        title: `Level set to ${LEVEL_LABEL[e.level] ?? e.level}`,
+        detail: e.source,
+        time: e.time,
+        target: { tab: "reports", elementId: "barangay-status" },
+      });
+    }
+    return list.filter((i) => i.time > 0).sort((x, y) => y.time - x.time).slice(0, FEED_LIMIT);
+  }, [reports, quick, alerts, levelEvents, reviewedAt, isMine]);
 
-    setFloodRisk(level);
-    setFloodRiskLastUpdate(updatedAt);
+  const feedLoading = statusLoading || reportsLoading || quickLoading || alertsLoading;
+  const feedState = useFeedState(feed, feedLoading, userId);
+
+  // 5. Open an update: switch tab, scroll to it and flash it.
+  useEffect(() => {
+    if (!focusTarget) return;
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.getElementById(focusTarget);
+      setFocusTarget(null);
+      if (!el) return;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: el.id === "barangay-status" ? "start" : "center" });
+      el.classList.remove("update-target-flash");
+      void el.offsetWidth; // restart the flash if the same item is opened twice
+      el.classList.add("update-target-flash");
+      window.setTimeout(() => el.classList.remove("update-target-flash"), 1500);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusTarget, tab, reportsView, reportFilter]);
+
+  const openUpdate = (item: BarangayUpdate) => {
+    if (item.kind === "report") {
+      const report = reports.find((r) => `report-${r.id}` === item.target.elementId);
+      setTab("reports");
+      setReportsView("community");
+      if (report) setReportFilter(isApprovedStatus(report.status) ? "approved" : report.status === "rejected" ? "rejected" : "pending");
+    } else if (item.kind === "quick") {
+      setTab("reports");
+      setReportsView("quick");
+    } else if (item.kind !== "level") {
+      setTab("alerts");
+    }
+    setFocusTarget(item.target.elementId);
   };
 
-  const stats = [
-    {
-      label: "Barangay Residents",
-      value: residentCount.toLocaleString(),
-      icon: Users,
-      color: "bg-blue-500",
-    },
-    {
-      label: "Active Alerts",
-      value: myAlerts.filter((alert) => alert.status === "approved").length.toString(),
-      icon: Bell,
-      color: "bg-yellow-500",
-    },
-    {
-      label: "Community Reports",
-      value: communityReports.length.toString(),
-      icon: MapPin,
-      color: "bg-green-500",
-    },
-    {
-      label: "Current Water Level",
-      value: floodRisk ? floodRiskConfig[floodRisk].label : "No data",
-      icon: Droplets,
-      color: floodRisk === "high" ? "bg-red-500" : floodRisk === "medium" ? "bg-amber-500" : "bg-green-500",
-    },
-  ];
-
-
-  const getAlertLevelConfig = (level: AlertLevel) => {
-    switch (level) {
-      case "advisory":
-        return { label: "ADVISORY", color: "bg-blue-500", textColor: "text-blue-700", bgColor: "bg-blue-50", borderColor: "border-blue-200" };
-      case "warning":
-        return { label: "WARNING", color: "bg-yellow-500", textColor: "text-yellow-700", bgColor: "bg-yellow-50", borderColor: "border-yellow-200" };
-      case "critical":
-        return { label: "CRITICAL", color: "bg-red-500", textColor: "text-red-700", bgColor: "bg-red-50", borderColor: "border-red-200" };
-    }
+  const logout = async () => {
+    if (!window.confirm("Log out of BAHAba?")) return;
+    setLoggingOut(true);
+    await signOut();
+    navigate("/login", { replace: true });
   };
 
-  const handleSubmitAlert = async () => {
-    if (!newAlert.title || !newAlert.message) {
-      alert("Please fill in all fields");
-      return;
-    }
-
-    const { data, error } = await supabase.from("alerts").insert({
-      level: newAlert.level,
-      title: newAlert.title.trim(),
-      message: newAlert.message.trim(),
-      target_barangay: selectedBarangay,
-      channels: "push",
-      sent_at: new Date().toISOString(),
-      recipients: residentCount,
-      created_by: `${selectedBarangay} Barangay Admin`,
-      status: "pending",
-    }).select().single();
-    if (error || !data) {
-      alert(error?.message ?? "Unable to submit alert.");
-      return;
-    }
-    setMyAlerts((current) => [{
-      id: data.id, level: data.level, title: data.title, message: data.message,
-      timestamp: data.sent_at, status: data.status, targetBarangay: data.target_barangay,
-    }, ...current]);
-    alert("Alert submitted to MDRRMO for verification!");
-    setNewAlert({ level: "advisory", title: "", message: "" });
-  };
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-background px-6 pt-6 pb-2">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <BrandLogo size={44} />
-              <div>
-                <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>Barangay Admin - {selectedBarangay ?? "Loading..."}</h1>
-                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                  Barangay Management Dashboard
-                </p>
-              </div>
+  const header = (
+    <div ref={headerRef} className="bg-background px-6 pt-6 pb-2 lg:sticky lg:top-0 lg:z-30">
+      <div className="mx-auto max-w-7xl lg:max-w-[1660px]">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <BrandLogo size={44} />
+            <div>
+              <h1 className="mb-1 text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+                Barangay Admin{barangay ? ` - ${barangay}` : ""}
+              </h1>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Barangay Management Dashboard</p>
             </div>
-            <ProfileButton name={myDisplayName} />
-            <button className="clay-btn clay-btn-secondary">
-              <Settings size={18} />
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => navigate("/admin/barangay/settings")} className="clay-btn clay-btn-secondary">
+              <Settings size={18} aria-hidden="true" />
               <span className="text-sm">Settings</span>
+            </button>
+            <button type="button" onClick={() => void logout()} disabled={loggingOut} className="clay-btn clay-btn-secondary">
+              <LogOut size={18} aria-hidden="true" />
+              <span className="text-sm">{loggingOut ? "Logging out..." : "Log out"}</span>
             </button>
           </div>
         </div>
       </div>
+    </div>
+  );
 
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {stats.map((stat, index) => {
-            const Icon = stat.icon;
-            return (
-              // Summary tile: clay. Icon on a decorative pastel chip.
-              <div
-                key={index}
-                className="clay p-5"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-3 rounded-full" style={{ background: `var(--${STAT_PASTELS[index % STAT_PASTELS.length]})` }}>
-                    <Icon size={24} style={{ color: `var(--${STAT_PASTELS[index % STAT_PASTELS.length]}-icon)` }} />
+  // No barangay (or the profile could not be read): explain instead of querying.
+  if (!profile || !barangay) {
+    return (
+      <div className="min-h-screen bg-background">
+        {header}
+        <div className="mx-auto max-w-2xl px-6 py-10">
+          {profileError ? (
+            <div role="alert" className="flat-alert" style={{ "--alert-color": "var(--risk-high)" } as CSSProperties}>
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Could not load your profile.</p>
+              <p className="mt-1 text-[13px]" style={{ color: "var(--text-secondary)" }}>{profileError}</p>
+            </div>
+          ) : !profile ? (
+            <div className="clay h-32 animate-pulse" aria-busy="true" aria-label="Loading your profile" />
+          ) : (
+            <div role="alert" className="flat-alert" style={{ "--alert-color": "var(--risk-medium)" } as CSSProperties}>
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Your account has no assigned barangay.</p>
+              <p className="mt-1 text-[13px]" style={{ color: "var(--text-secondary)" }}>
+                Ask MDRRMO to set your barangay in Users and roles, then reload this page.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const pendingCount = reports.filter((r) => !isApprovedStatus(r.status) && r.status !== "rejected").length;
+  const pendingDrafts = drafts.filter((a) => a.status === "pending").length;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {header}
+
+      {/* Under 1024px: Recent updates collapses into a bar right under the header. */}
+      <div className="px-6 pt-2 lg:hidden">
+        <div className="mx-auto max-w-7xl">
+          <BarangayUpdatesBar items={feed} state={feedState} loading={feedLoading} onOpen={openUpdate} />
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-6 py-6 lg:grid lg:max-w-[1660px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">
+        <div className="min-w-0 space-y-6">
+          <BarangayStatusPanel
+            barangayName={barangay}
+            row={row}
+            hours={hours}
+            overrideHours={overrideHours}
+            loading={statusLoading}
+            error={statusError}
+            now={now}
+            onRetry={() => {
+              setStatusLoading(true);
+              void loadStatus();
+            }}
+            onChanged={loadStatus}
+          />
+
+          <div className="clay p-5">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
+              <button type="button" role="tab" aria-selected={tab === "reports"} className="clay-tab" onClick={() => setTab("reports")}>
+                Reports{pendingCount ? ` (${pendingCount} pending)` : ""}
+              </button>
+              <button type="button" role="tab" aria-selected={tab === "alerts"} className="clay-tab" onClick={() => setTab("alerts")}>
+                Alert drafts{pendingDrafts ? ` (${pendingDrafts} pending)` : ""}
+              </button>
+            </div>
+
+            <div className="mt-5">
+              {tab === "reports" ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2" role="tablist" aria-label="Report type">
+                    <button type="button" role="tab" aria-selected={reportsView === "community"} className="clay-tab" onClick={() => setReportsView("community")}>
+                      Community reports
+                    </button>
+                    <button type="button" role="tab" aria-selected={reportsView === "quick"} className="clay-tab" onClick={() => setReportsView("quick")}>
+                      Quick Reports ({quick.length})
+                    </button>
                   </div>
+                  {reportsView === "community" ? (
+                    <CommunityReportsSection
+                      barangay={barangay}
+                      userId={userId}
+                      reports={reports}
+                      loading={reportsLoading}
+                      error={reportsError}
+                      filter={reportFilter}
+                      onFilter={setReportFilter}
+                      onRetry={() => {
+                        setReportsLoading(true);
+                        void loadReports();
+                      }}
+                      onUpdated={(updated) => setReports((current) => current.map((r) => (r.id === updated.id ? updated : r)))}
+                    />
+                  ) : (
+                    <QuickReportsSection
+                      barangay={barangay}
+                      rows={quick}
+                      loading={quickLoading}
+                      error={quickError}
+                      onRetry={() => {
+                        setQuickLoading(true);
+                        void loadQuick();
+                      }}
+                    />
+                  )}
                 </div>
-                <p className="text-2xl font-bold mb-1" style={{ color: "var(--text-primary)" }}>{stat.value}</p>
-                <p className="text-sm text-gray-600">{stat.label}</p>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Info Banner */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-          <p className="text-sm text-blue-800">
-            <strong>Note:</strong> All alerts you create will be sent to MDRRMO Admin for verification before being broadcast to residents.
-          </p>
-        </div>
-
-        {/* Tabs */}
-        <div className="bg-white border border-border rounded-xl mb-6">
-          <div className="border-b border-gray-200 px-4 py-3 overflow-x-auto">
-            <div className="flex gap-2" role="tablist">
-              {[
-                { id: "overview", label: "Overview" },
-                { id: "create-alert", label: "Create Alert" },
-                { id: "my-alerts", label: "My Alerts" },
-                { id: "reports", label: "Community Reports" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  role="tab"
-                  aria-selected={activeTab === tab.id}
-                  className="clay-tab"
-                >
-                  {tab.label}
-                </button>
-              ))}
+              ) : (
+                <BarangayAlertsSection
+                  barangay={barangay}
+                  createdBy={myName}
+                  drafts={drafts}
+                  autoAlerts={autoAlerts}
+                  loading={alertsLoading}
+                  error={alertsError}
+                  onCreated={(alert) => setAlerts((current) => [alert, ...current.filter((a) => a.id !== alert.id)])}
+                />
+              )}
             </div>
           </div>
-
-          <div className="p-6">
-            {/* Overview Tab */}
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                <div className="bg-white border-l-4 border-primary p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div>
-                      <h2 className="text-lg">Water Level Status</h2>
-                      <p className="text-sm text-gray-500">
-                        Update the current flood risk for {selectedBarangay ?? "your Barangay"}.
-                      </p>
-                    </div>
-                    {floodRisk ? (
-                      <span className={`text-sm font-medium px-3 py-1 rounded-full ${floodRiskConfig[floodRisk].badge}`}>
-                        {floodRiskConfig[floodRisk].label}
-                      </span>
-                    ) : (
-                      <span className="text-sm font-medium px-3 py-1 rounded-full bg-gray-100 text-gray-600">
-                        Status unavailable
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {(["low", "medium", "high"] as FloodRisk[]).map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() => updateFloodRisk(level)}
-                        className={`border rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                          floodRisk === level
-                            ? floodRiskConfig[level].button
-                            : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                        }`}
-                      >
-                        {floodRiskConfig[level].label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-4">
-                    Last updated: {floodRiskLastUpdate ? new Date(floodRiskLastUpdate).toLocaleString() : "Unavailable"}
-                  </p>
-                </div>
-
-                <div>
-                  <h2 className="text-lg mb-4">Recent Activity</h2>
-                  <div className="space-y-3">
-                    {myAlerts.slice(0, 2).map((alert) => (
-                      <div key={alert.id} className="flex items-center justify-between p-4 bg-gray-50 border-l-4 border-risk-medium">
-                        <div className="flex items-center gap-4"><div className="bg-green-100 p-2 rounded-lg"><CheckCircle size={20} className="text-green-600" /></div><div><p className="text-sm mb-1">Alert: {alert.title}</p><p className="text-xs text-gray-500">{alert.status} | {new Date(alert.timestamp).toLocaleString()}</p></div></div>
-                      </div>
-                    ))}
-                    {communityReports.slice(0, 1).map((report) => (
-                      <div key={report.id} className="flex items-center justify-between p-4 bg-gray-50 border-l-4 border-primary"><div className="flex items-center gap-4"><div className="bg-blue-100 p-2 rounded-lg"><MapPin size={20} className="text-blue-600" /></div><div><p className="text-sm mb-1">New community report received</p><p className="text-xs text-gray-500">From {report.user_name} | {new Date(report.timestamp).toLocaleString()}</p></div></div><button onClick={() => setActiveTab("reports")} className="bg-primary text-white px-4 py-2 rounded-md text-sm">View</button></div>
-                    ))}
-                    {!myAlerts.length && !communityReports.length && <p className="text-sm text-gray-500">No recent activity.</p>}
-                  </div>
-                </div>
-
-                <div>
-                  <h2 className="text-lg mb-4">Barangay Status</h2>
-                  <div className="bg-white border-l-4 border-risk-high p-5 shadow-sm">
-                    <div className="flex items-center gap-3 mb-3">
-                      <AlertTriangle size={32} className="text-red-600" />
-                      <div>
-                        <p className="text-sm text-gray-600 mb-1">Current Status</p>
-                        <p className="text-xl">{communityReports.length ? "Reported Flood Risk" : "No reported risk"}</p>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-700">
-                      {communityReports.length ? `Latest reports indicate ${communityReports[0].water_level}-level water conditions. Monitor conditions closely.` : "No community water-level reports are available yet."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Create Alert Tab */}
-            {activeTab === "create-alert" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg">Create Alert for {selectedBarangay}</h2>
-                </div>
-
-                {/* Notification Popup */}
-                {showNotification && (
-                  <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-white rounded-xl shadow-2xl p-4 max-w-sm mx-4 z-50 border border-red-200 animate-in slide-in-from-top">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="text-red-600 mt-0.5" size={20} />
-                      <div className="flex-1">
-                        <p className="text-sm mb-1">
-                          <strong>BAHAba Alert</strong>
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          This is a preview of how your alert will appear to residents.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Alert Form */}
-                <div className="bg-gray-50 rounded-lg p-5">
-                  <h3 className="text-sm mb-4">Alert Details</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm text-gray-600 mb-2 block">
-                        Alert Level
-                      </label>
-                      <select
-                        value={newAlert.level}
-                        onChange={(e) => setNewAlert({ ...newAlert, level: e.target.value as AlertLevel })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
-                      >
-                        <option value="advisory">Advisory (Blue) - Information</option>
-                        <option value="warning">Warning (Yellow) - Prepare to Act</option>
-                        <option value="critical">Critical (Red) - Act Now</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-600 mb-2 block">
-                        Alert Title
-                      </label>
-                      <input
-                        type="text"
-                        value={newAlert.title}
-                        onChange={(e) => setNewAlert({ ...newAlert, title: e.target.value })}
-                        placeholder="e.g., Flood Warning - Main Road"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-600 mb-2 block">
-                        Message
-                      </label>
-                      <textarea
-                        value={newAlert.message}
-                        onChange={(e) => setNewAlert({ ...newAlert, message: e.target.value })}
-                        placeholder="Enter alert message for residents..."
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
-                        rows={4}
-                      ></textarea>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => {
-                          setShowNotification(true);
-                          setTimeout(() => setShowNotification(false), 3000);
-                        }}
-                        className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        onClick={handleSubmitAlert}
-                        className="clay-btn clay-btn-primary flex-1"
-                      >
-                        <Send size={18} />
-                        Submit to MDRRMO
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* My Alerts Tab */}
-            {activeTab === "my-alerts" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg">My Alert History</h2>
-                </div>
-
-                <div className="space-y-3">
-                  {myAlerts.map((alert) => {
-                    const config = getAlertLevelConfig(alert.level);
-                    return (
-                      <div
-                        key={alert.id}
-                        className="border border-gray-200 rounded-lg p-4"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className={`text-xs px-2 py-1 rounded-full ${config.bgColor} ${config.textColor} font-medium`}>
-                                {config.label}
-                              </span>
-                              {alert.status === "approved" && (
-                                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
-                                  Approved
-                                </span>
-                              )}
-                              {alert.status === "pending" && (
-                                <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
-                                  Pending MDRRMO Verification
-                                </span>
-                              )}
-                              {alert.status === "rejected" && (
-                                <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
-                                  Rejected
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm mb-1">{alert.title}</p>
-                            <p className="text-xs text-gray-500 mb-2">{alert.timestamp}</p>
-                            <p className="text-sm text-gray-700">{alert.message}</p>
-
-                            {alert.status === "rejected" && alert.rejectionReason && (
-                              <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="text-xs text-red-800">
-                                  <strong>Rejection Reason:</strong> {alert.rejectionReason}
-                                </p>
-                              </div>
-                            )}
-
-                            {alert.verifiedBy && (
-                              <p className="text-xs text-gray-500 mt-2">
-                                Verified by: {alert.verifiedBy}
-                              </p>
-                            )}
-                          </div>
-                          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                            <Eye size={18} className="text-gray-600" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Community Reports Tab */}
-            {activeTab === "reports" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg">Community Reports - {selectedBarangay}</h2>
-                </div>
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-                  <p className="text-sm text-yellow-800">
-                    <strong>Note:</strong> Reports are verified by MDRRMO Admin. You can view reports from your barangay only.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {communityReports.map((report) => (
-                    <div
-                      key={report.id}
-                      className="border border-gray-200 rounded-lg p-4"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-green-200 rounded-full flex items-center justify-center text-green-700">
-                            {report.user_name.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm mb-1">{report.user_name}</p>
-                            <p className="text-xs text-gray-500">
-                              {report.location}
-                            </p>
-                            <p className="text-xs text-gray-500 font-mono">
-                              GPS: {report.lat !== null && report.lng !== null ? `${report.lat.toFixed(6)}, ${report.lng.toFixed(6)}` : "Not provided"}
-                            </p>
-                          </div>
-                        </div>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full ${
-                            report.status === "verified"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}
-                        >
-                          {report.status}
-                        </span>
-                      </div>
-
-                      {report.photo_path ? <img src={report.photo_path} alt="Community report" className="w-full h-32 object-cover rounded-lg mb-3" /> : <div className="bg-gray-100 rounded-lg h-16 mb-3 flex items-center justify-center"><span className="text-sm text-gray-500">No photo attached</span></div>}
-
-                      <p className="text-sm text-gray-700 mb-2">
-                        {report.description}
-                      </p>
-
-                      <div className="flex items-center gap-2 mb-2">
-                        <Droplets size={16} className="text-blue-600" />
-                        <p className="text-sm text-gray-600">Water Level: {report.water_level}</p>
-                      </div>
-
-                      <p className="text-xs text-gray-500">
-                        <Clock size={12} className="inline mr-1" />
-                        {new Date(report.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
+
+        {/* 1024px+: live Recent updates column, sticky under the header, scrolls inside itself. */}
+        <aside className="hidden lg:block lg:sticky" style={{ top: headerHeight + 16, height: `calc(100vh - ${headerHeight}px - 32px)` }}>
+          <BarangayUpdatesColumn items={feed} state={feedState} loading={feedLoading} onOpen={openUpdate} />
+        </aside>
       </div>
     </div>
   );

@@ -30,6 +30,8 @@ import { useAuth } from "../../lib/auth";
 import { playNotificationSound, readAdminPopupPrefs } from "../../lib/adminPrefs";
 import { QuickReportsPanel, useQuickReportPendingCount } from "./QuickReportsPanel";
 import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
+import { NewDot, ReportMessages } from "./ReportMessages";
+import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../lib/reportMessages";
 
 // Alert Level Types (ISO Standard)
 type AlertLevel = "advisory" | "warning" | "critical";
@@ -97,8 +99,6 @@ export function MDRRMOAdminDashboard() {
   const [reviewToasts, setReviewToasts] = useState<ReviewToast[]>([]);
   const [selectedAlertLevel, setSelectedAlertLevel] = useState<AlertLevel>("warning");
   const [reports, setReports] = useState<Report[]>([]);
-  const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
-  const [replyEditors, setReplyEditors] = useState<Record<number, boolean>>({});
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [userCount, setUserCount] = useState(0);
@@ -110,6 +110,11 @@ export function MDRRMOAdminDashboard() {
   const quickReportsPending = useQuickReportPendingCount();
   // Recent updates: derived from the reports/alerts state below (no extra queries or channels).
   const recentUpdates = useRecentUpdates(reports, alerts, loadingData, session?.user.id ?? null);
+  // Latest message per report, for the "New" dots on the Reports tab.
+  const { latest: latestMessages, update: updateLatestMessage } = useLatestMessages(reports.map((report) => report.id));
+  const reportsHaveNewMessages = reports.some((report) =>
+    hasNewMessage(latestMessages[report.id], "mdrrmo", session?.user.id ? getThreadLastSeen(session.user.id, report.id) : 0),
+  );
 
   // Header height drives the sticky Recent updates column's offset.
   useEffect(() => {
@@ -561,39 +566,6 @@ export function MDRRMOAdminDashboard() {
     setReports((current) => current.map((report) => report.id === reportId ? { ...report, status } : report));
   };
 
-  const sendReportReply = async (reportId: number, replyText: string) => {
-    const trimmedReply = replyText.trim();
-    if (!trimmedReply) {
-      alert("Reply cannot be empty.");
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("community_reports")
-      .update({ admin_reply: trimmedReply })
-      .eq("id", reportId)
-      .select();
-
-    if (error) {
-      alert(`Unable to send reply: ${error.message}`);
-      return;
-    }
-
-    const updatedReply = data?.[0];
-    setReports((current) =>
-      current.map((report) =>
-        report.id === reportId
-          ? {
-              ...report,
-              admin_reply: trimmedReply,
-              admin_reply_at: updatedReply?.admin_reply_at ?? new Date().toISOString(),
-            }
-          : report
-      )
-    );
-    setReplyEditors((current) => ({ ...current, [reportId]: false }));
-  };
-
   const handleDeleteReport = async (reportId: number) => {
     const confirmed = window.confirm("Delete this community report? This action cannot be undone.");
     if (!confirmed) {
@@ -810,6 +782,7 @@ export function MDRRMOAdminDashboard() {
                   >
                     <TabIcon size={18} />
                     {tab.label}
+                    {tab.id === "reports" && reportsHaveNewMessages && activeTab !== "reports" && <NewDot />}
                     {badge ? (
                       <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "var(--risk-high)" }}>
                         {badge}<span className="sr-only"> pending</span>
@@ -1352,122 +1325,16 @@ export function MDRRMOAdminDashboard() {
                       </div>
                       {report.photo_path && <img src={report.photo_path} alt="Community report" className="mt-3 w-full max-h-56 object-cover rounded-lg" />}
 
-                      {isApprovedReportStatus(report.status) && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Reply to Reporter</p>
-
-                          {report.admin_reply ? (
-                            <div className="space-y-3">
-                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                <p className="text-xs font-medium text-blue-800">Reply from MDRRMO</p>
-                                <p className="text-sm text-blue-900 mt-1 whitespace-pre-wrap">{report.admin_reply}</p>
-                                {report.admin_reply_at && (
-                                  <p className="text-[11px] text-blue-700 mt-2">
-                                    Sent {new Date(report.admin_reply_at).toLocaleString()}
-                                  </p>
-                                )}
-                              </div>
-
-                              {replyEditors[report.id] ? (
-                                <div className="space-y-2">
-                                  <textarea
-                                    value={replyDrafts[report.id] ?? report.admin_reply}
-                                    onChange={(event) =>
-                                      setReplyDrafts((current) => ({
-                                        ...current,
-                                        [report.id]: event.target.value,
-                                      }))
-                                    }
-                                    rows={3}
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
-                                    placeholder="Update the reply to the reporter"
-                                  />
-                                  <div className="flex flex-wrap gap-2">
-                                    <button
-                                      onClick={() => void sendReportReply(report.id, replyDrafts[report.id] ?? report.admin_reply ?? "")}
-                                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
-                                    >
-                                      Update Reply
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setReplyEditors((current) => ({ ...current, [report.id]: false }));
-                                        setReplyDrafts((current) => ({ ...current, [report.id]: report.admin_reply ?? "" }));
-                                      }}
-                                      className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setReplyEditors((current) => ({ ...current, [report.id]: true }));
-                                    setReplyDrafts((current) => ({ ...current, [report.id]: report.admin_reply ?? "" }));
-                                  }}
-                                  className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg text-sm"
-                                >
-                                  Edit Reply
-                                </button>
-                              )}
-                            </div>
-                          ) : replyEditors[report.id] ? (
-                            <div className="space-y-2">
-                              <textarea
-                                value={replyDrafts[report.id] ?? ""}
-                                onChange={(event) =>
-                                  setReplyDrafts((current) => ({
-                                    ...current,
-                                    [report.id]: event.target.value,
-                                  }))
-                                }
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
-                                placeholder="Write a reply to the reporter"
-                              />
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  onClick={() => void sendReportReply(report.id, replyDrafts[report.id] ?? "")}
-                                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
-                                >
-                                  Send Reply
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setReplyEditors((current) => ({ ...current, [report.id]: false }));
-                                    setReplyDrafts((current) => ({ ...current, [report.id]: "" }));
-                                  }}
-                                  className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              <textarea
-                                value={replyDrafts[report.id] ?? ""}
-                                onChange={(event) =>
-                                  setReplyDrafts((current) => ({
-                                    ...current,
-                                    [report.id]: event.target.value,
-                                  }))
-                                }
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none"
-                                placeholder="Write a reply to the reporter"
-                              />
-                              <button
-                                onClick={() => void sendReportReply(report.id, replyDrafts[report.id] ?? "")}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
-                              >
-                                Send Reply
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {/* Thread with the resident and Barangay; the old single reply shows first. */}
+                      <ReportMessages
+                        reportId={report.id}
+                        viewerRole="mdrrmo"
+                        userId={session?.user.id ?? null}
+                        latest={latestMessages[report.id]}
+                        onLatest={updateLatestMessage}
+                        legacyReply={{ body: report.admin_reply, at: report.admin_reply_at }}
+                        canDelete
+                      />
 
                       <div className="mt-4 pt-4 border-t border-gray-200">
                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Admin actions</p>

@@ -12,6 +12,7 @@ import { Profile } from "./components/Profile";
 import { QuickReport } from "./components/QuickReport";
 import { LegalPage } from "./components/LegalPage";
 import { MDRRMOSettings } from "./components/settings/MDRRMOSettings";
+import { BarangaySettings } from "./components/settings/BarangaySettings";
 import { ProtectedRoute, PublicOnlyRoute, RoleHomeRedirect, WelcomeRoute } from "./components/ProtectedRoute";
 import { Welcome } from "./components/Welcome";
 import { RESIDENT_ONLY, ROUTE_ROLES } from "../lib/auth";
@@ -65,6 +66,10 @@ export const router = createBrowserRouter([
   {
     path: "/admin/barangay",
     element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/barangay"]}><BarangayAdminDashboard /></ProtectedRoute>,
+  },
+  {
+    path: "/admin/barangay/settings",
+    element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/barangay/settings"]}><BarangaySettings /></ProtectedRoute>,
   },
   {
     // Resident pages (Home, Map, Alerts, Community Reports incl. the submit form).

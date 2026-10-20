@@ -13,6 +13,7 @@ import '../../repositories/report_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/flat_status_card.dart';
+import '../../widgets/report_messages_section.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/screen_header.dart';
 
@@ -294,7 +295,10 @@ class _CommunityReportsScreenState extends State<CommunityReportsScreen> {
                     return Column(
                       children: [
                         for (final report in myReports)
-                          _ReportCard(report: report),
+                          _ReportCard(
+                              key: ValueKey(report.id),
+                              report: report,
+                              showMessages: true),
                       ],
                     );
                   },
@@ -538,7 +542,11 @@ class _ErrorBox extends StatelessWidget {
 class _ReportCard extends StatelessWidget {
   final CommunityReport report;
 
-  const _ReportCard({required this.report});
+  /// Own reports: the Messages thread (which also shows the old reply).
+  final bool showMessages;
+
+  const _ReportCard(
+      {super.key, required this.report, this.showMessages = false});
 
   @override
   Widget build(BuildContext context) {
@@ -637,7 +645,14 @@ class _ReportCard extends StatelessWidget {
                   style: const TextStyle(fontSize: 12)),
             ],
           ),
-          if ((report.adminReply ?? '').trim().isNotEmpty) ...[
+          if (showMessages && report.id != null)
+            ReportMessagesSection(
+              key: ValueKey('messages-${report.id}'),
+              reportId: report.id!,
+              legacyReply: report.adminReply,
+              legacyReplyAt: report.adminReplyAt,
+            )
+          else if ((report.adminReply ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),

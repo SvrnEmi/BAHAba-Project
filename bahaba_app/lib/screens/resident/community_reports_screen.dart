@@ -598,7 +598,7 @@ class _ReportCardState extends State<_ReportCard> {
                     Text(
                       report.timestamp,
                       style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 11),
+                          color: AppColors.textSecondary, fontSize: 12),
                     ),
                   ],
                 ),
@@ -623,7 +623,7 @@ class _ReportCardState extends State<_ReportCard> {
                         'GPS: ${report.lat!.toStringAsFixed(4)}, ${report.lng!.toStringAsFixed(4)}',
                         style: const TextStyle(
                           color: AppColors.textSecondary,
-                          fontSize: 11,
+                          fontSize: 12,
                           fontFamily: 'monospace',
                         ),
                       ),
@@ -713,7 +713,7 @@ class _ReportCardState extends State<_ReportCard> {
                   const Text(
                     'Reply from MDRRMO:',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.4,
                     ),
@@ -729,7 +729,7 @@ class _ReportCardState extends State<_ReportCard> {
                       child: Text(
                         'Sent ${_formatReplyTimestamp(report.adminReplyAt!)}',
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: AppColors.textSecondary,
                         ),
                       ),

@@ -301,7 +301,7 @@ class _ScaleStep extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 color: active ? AppColors.ink : AppColors.textSecondary,
               ),

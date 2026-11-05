@@ -238,7 +238,7 @@
   line-height: 1.2;
   white-space: nowrap;
 }
-.risk-badge.is-compact { padding: 3px 8px; gap: 4px; font-size: 11px; }
+.risk-badge.is-compact { padding: 3px 8px; gap: 4px; font-size: 12px; }
 .risk-badge-low { background: var(--risk-low); color: #fff; }
 .risk-badge-medium { background: var(--risk-medium); color: var(--text-primary); }
 .risk-badge-high { background: var(--risk-high); color: #fff; }
@@ -338,3 +338,6 @@
   .update-target-flash { animation: none; box-shadow: 0 0 0 3px var(--primary-brand); }
   .live-dot { animation: none; }
 }
+
+/* The map library's credit line is 11px by default. */
+.pigeon-attribution { font-size: 12px !important; }

@@ -504,7 +504,7 @@ export function CommunityReports() {
                       <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "var(--primary-shade)" }}>Reply from MDRRMO:</p>
                       <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>{report.admin_reply}</p>
                       {report.admin_reply_at && (
-                        <p className="mt-2 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                        <p className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
                           Sent {new Date(report.admin_reply_at).toLocaleString()}
                         </p>
                       )}

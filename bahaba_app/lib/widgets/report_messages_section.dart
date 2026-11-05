@@ -165,7 +165,7 @@ class NewDot extends StatelessWidget {
         Text(
           'New',
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
             color: AppColors.riskHigh,
           ),
@@ -482,7 +482,7 @@ class _Bubble extends StatelessWidget {
             child: Text(
               note == null ? label.toUpperCase() : '${label.toUpperCase()} · $note',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.4,
                 color: own ? AppColors.textSecondary : AppColors.primaryShade,
@@ -529,7 +529,7 @@ class _Bubble extends StatelessWidget {
               child: Text(
                 _format(when!),
                 style: const TextStyle(
-                    fontSize: 11, color: AppColors.textSecondary),
+                    fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
         ],

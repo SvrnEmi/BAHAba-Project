@@ -154,7 +154,7 @@ export function BahaHistoryMap({ eventId: initialEventId = null, events: eventsP
         {WATER_LEVELS.map((level) => (
           <div key={level} className="flex flex-col items-center text-center">
             <WaterLevelIcon level={level} size={30} />
-            <span className="mt-1 text-[11px] leading-tight" style={{ color: "var(--text-primary)" }}>
+            <span className="mt-1 text-xs leading-tight" style={{ color: "var(--text-primary)" }}>
               {WATER_LABELS.en[level]}
             </span>
           </div>

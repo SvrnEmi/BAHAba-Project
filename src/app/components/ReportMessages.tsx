@@ -43,7 +43,7 @@ const formatWhen = (iso: string) => {
 /** Red dot plus the word "New" (not color alone); screen readers hear "New messages". */
 export function NewDot({ suffix = "messages" }: { suffix?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-bold" style={{ color: "var(--risk-high)" }}>
+    <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: "var(--risk-high)" }}>
       <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full" style={{ background: "var(--risk-high)" }} />
       <span>New</span>
       <span className="sr-only"> {suffix}</span>
@@ -324,7 +324,7 @@ function Bubble({
   const label = own ? "You" : SENDER_LABELS[role] ?? "Staff";
   return (
     <li className={`flex flex-col ${own ? "items-end" : "items-start"}`}>
-      <span className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wide" style={{ color: own ? "var(--text-secondary)" : "var(--primary-shade)" }}>
+      <span className="mb-1 px-1 text-xs font-bold uppercase tracking-wide" style={{ color: own ? "var(--text-secondary)" : "var(--primary-shade)" }}>
         {label}
         {note ? ` · ${note}` : ""}
       </span>
@@ -339,7 +339,7 @@ function Bubble({
         {/* Plain text only: React escapes it; no links, no HTML. */}
         <p className="whitespace-pre-wrap break-words">{body}</p>
       </div>
-      <span className="mt-1 flex items-center gap-3 px-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+      <span className="mt-1 flex items-center gap-3 px-1 text-xs" style={{ color: "var(--text-secondary)" }}>
         {when ? formatWhen(when) : ""}
         {action}
       </span>

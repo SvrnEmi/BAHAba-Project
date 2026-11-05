@@ -131,7 +131,7 @@ export function BahaCountdownCard({ row }: { row: CountdownRow }) {
                 >
                   <WaterLevelIcon level={level} active={active} />
                   <span
-                    className="mt-1 truncate text-[11px]"
+                    className="mt-1 truncate text-xs"
                     style={{
                       color: active ? "var(--text-primary)" : "var(--text-secondary)",
                       fontWeight: active ? 700 : 500,

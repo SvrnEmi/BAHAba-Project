@@ -333,7 +333,7 @@ class _Legend extends StatelessWidget {
                   Text(
                     waterLevelLabel(level),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 11, color: AppColors.ink),
+                    style: const TextStyle(fontSize: 12, color: AppColors.ink),
                   ),
                 ],
               ),

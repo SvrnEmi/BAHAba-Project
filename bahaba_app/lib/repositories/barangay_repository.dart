@@ -34,7 +34,7 @@ class BarangayRepository {
       final rows = await Supabase.instance.client
           .from('barangays')
           .select('name')
-          .order('name');
+          .order('name', ascending: true);
       final names = rows
           .map((r) => (r['name'] ?? '').toString().trim())
           .where((n) => n.isNotEmpty)

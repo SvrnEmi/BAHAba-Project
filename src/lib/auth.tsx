@@ -23,13 +23,17 @@ export const ROUTE_ROLES: Record<string, readonly Role[]> = {
   "/alerts": RESIDENT_ONLY,
   "/reports": RESIDENT_ONLY,
   "/map": RESIDENT_ONLY,
+  "/map/history": RESIDENT_ONLY,
+  "/alerts/all": RESIDENT_ONLY,
   // Each user's own profile, reached from the avatar in the resident and barangay headers.
   // MDRRMO has no profile page; its dashboard header has its own Log out button.
   "/profile": ["resident", "barangay"],
   "/admin/barangay": ["barangay"],
   "/admin/barangay/settings": ["barangay"],
+  "/admin/barangay/alerts": ["barangay"],
   "/admin/mdrrmo": ["mdrrmo"],
   "/admin/mdrrmo/settings": ["mdrrmo"],
+  "/admin/mdrrmo/alerts": ["mdrrmo"],
 };
 
 export function homeFor(role: Role): string {

@@ -6,6 +6,8 @@ import { supabase } from "../../lib/supabase";
 import { asRiskLevel, riskSourceLabel, runFloodRiskUpdate, type RiskLevel } from "../../lib/floodRisk";
 import { subscribeToTable } from "../../lib/realtime";
 import { RiskBadge } from "./clay/Clay";
+import { InfoTip, RAIN_TILE_INFO } from "./InfoTip";
+import { RainfallInfoLink } from "./RainfallInfo";
 
 /*
  * MDRRMO "Rainfall forecast" panel. Reads barangays (current + forecast risk,
@@ -432,7 +434,10 @@ export function RainfallForecastPanel() {
 function Tile({ label, value, unit, note }: { label: string; value: string; unit: string; note?: string }) {
   return (
     <div className="rounded-xl border bg-white p-3" style={{ borderColor: "var(--border)" }}>
-      <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</p>
+      <div className="flex items-start justify-between gap-1">
+        <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</p>
+        {RAIN_TILE_INFO[label] && <span className="-mr-2 -mt-2"><InfoTip label={label}>{RAIN_TILE_INFO[label]}</InfoTip></span>}
+      </div>
       <p className="mt-1 text-xl font-bold" style={{ color: "var(--text-primary)" }}>
         {value}
         {value !== "--" && <span className="ml-1 text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{unit}</span>}
@@ -623,6 +628,7 @@ function ThresholdsNote({ settings }: { settings: RiskSettings | null }) {
           numbers because the model resolution is several kilometers.
         </p>
       </details>
+      <RainfallInfoLink />
     </div>
   );
 }

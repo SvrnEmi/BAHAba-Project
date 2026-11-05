@@ -17,7 +17,7 @@ export function AdminSelection() {
       path: "/admin/mdrrmo",
       features: [
         "System-wide oversight",
-        "Verify barangay alerts",
+        "Oversee barangay alerts",
         "Verify community reports",
         "View all barangays",
         "System analytics",
@@ -111,11 +111,11 @@ export function AdminSelection() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
             <div>
               <p className="font-semibold text-blue-600 mb-1">MDRRMO Admin</p>
-              <p>Full system access with verification authority over all barangay alerts and community reports.</p>
+              <p>Full system access: oversees all barangay alerts (edit, withdraw, republish) and verifies community reports.</p>
             </div>
             <div>
               <p className="font-semibold text-green-600 mb-1">Barangay Admin</p>
-              <p>Limited to managing a specific barangay. Alerts require MDRRMO verification before broadcast.</p>
+              <p>Limited to managing a specific barangay. Publishes alerts directly to its residents.</p>
             </div>
           </div>
         </div>

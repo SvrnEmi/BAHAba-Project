@@ -36,7 +36,8 @@ Anyone can send a **Quick Report** without an account. Each device may send up t
 
 ## 4. Review, moderation, and enforcement
 
-- Reports are reviewed by barangay administrators and the MDRRMO. They may approve, reject (with a reason), reply to, edit the status of, or remove reports and alerts.
+- Reports are reviewed by barangay administrators and the MDRRMO. They may approve or reject a report (each with a reason shown to you), reply to it, or remove it. You can reply in the report thread whatever its status.
+- Barangay administrators publish alerts for their own barangay directly, without waiting for MDRRMO approval (up to 5 alerts per hour). A barangay administrator can withdraw their own alert with a reason; the MDRRMO can edit, withdraw, republish, or remove any alert. Withdrawn alerts are no longer shown to residents.
 - If an account breaks these Terms or community guidelines, the administrator may **flag** the account, **suspend** it, **change its role**, **reset its password**, or **delete** it. We act proportionately; serious or repeated violations (such as deliberate false reports) may result in permanent removal and referral to the proper authorities under applicable Philippine law.
 - You may contact the MDRRMO if you believe an action was taken by mistake.
 

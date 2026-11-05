@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle, Clock, Droplets, ImageOff, Loader, MapPin, Phone, RefreshCw, XCircle } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { CheckCircle, Clock, Droplets, ImageOff, MapPin, Phone, RefreshCw, XCircle } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../../lib/reportMessages";
 import { NewDot, ReportMessages } from "../ReportMessages";
 import { waterLevelInfo } from "../../../lib/quickReport";
 import { displayReporterName, waterLevelLabel } from "../../../lib/reports";
-import { errorMessage, formatManilaDateTime } from "../../../lib/barangayAdmin";
+import { formatManilaDateTime } from "../../../lib/barangayAdmin";
+import { REPORT_APPROVE_REASONS, REPORT_REJECT_REASONS } from "../../../lib/alerts";
+import { DisclosureCard } from "../alerts/AlertDisclosure";
+import { ReasonDialog } from "../ReasonDialog";
+import { writeAuditLog } from "../../../lib/audit";
+import { queryReports, type ReportSort } from "../../../lib/reportQuery";
+import { ReportQueryBar } from "../ReportQueryBar";
 
 /*
- * Barangay admin review of community reports (own barangay only: approve, or
- * reject with a required reason, and a message thread with the resident;
+ * Barangay admin review of community reports (own barangay only: approve or
+ * reject, each with a required reason, and a message thread with the resident;
  * deleting reports or messages stays with MDRRMO) and a read-only list of
  * approved Quick Reports for the barangay.
  */
@@ -26,10 +32,11 @@ export type BarangayReport = {
   status: string;
   timestamp: string;
   rejection_reason: string | null;
+  approval_reason: string | null;
   barangay: string | null;
 };
 
-export const REPORT_COLUMNS = "id, user_name, location, lat, lng, water_level, description, photo_path, status, timestamp, rejection_reason, barangay";
+export const REPORT_COLUMNS = "id, user_name, location, lat, lng, water_level, description, photo_path, status, timestamp, rejection_reason, approval_reason, barangay";
 
 /** Explicit list: select("*") fails on quick_reports (hash columns are not readable). */
 export const QUICK_REPORT_COLUMNS =
@@ -96,9 +103,12 @@ export function CommunityReportsSection({
   onRetry: () => void;
   onUpdated: (report: BarangayReport) => void;
 }) {
-  const [rejecting, setRejecting] = useState<BarangayReport | null>(null);
-  const visible = reports.filter((r) => matches(r, filter));
+  const [reviewing, setReviewing] = useState<{ report: BarangayReport; decision: "approved" | "rejected" } | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ReportSort>("newest");
   const { latest, update: updateLatest } = useLatestMessages(reports.filter((r) => r.barangay === barangay).map((r) => r.id));
+  const inFilter = reports.filter((r) => matches(r, filter));
+  const visible = queryReports(inFilter, query, sort, (id) => latest[id]?.created_at);
   const newIds = new Set(
     reports.filter((r) => hasNewMessage(latest[r.id], "barangay", userId ? getThreadLastSeen(userId, r.id) : 0)).map((r) => r.id),
   );
@@ -116,6 +126,10 @@ export function CommunityReportsSection({
         ))}
       </div>
 
+      {!error && !loading && reports.length > 0 && (
+        <ReportQueryBar query={query} onQuery={setQuery} sort={sort} onSort={setSort} shown={visible.length} total={inFilter.length} />
+      )}
+
       {error ? (
         <div className="space-y-2">
           <ErrorBox text={`Could not load reports: ${error}`} />
@@ -123,37 +137,86 @@ export function CommunityReportsSection({
         </div>
       ) : loading ? (
         <div className="space-y-3" aria-busy="true">
-          {[0, 1, 2].map((i) => <div key={i} className="clay h-28 animate-pulse" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="clay h-20 animate-pulse" />)}
         </div>
       ) : visible.length === 0 ? (
         <div className="clay p-8 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
-          {reports.length === 0 ? `No reports for ${barangay} yet` : `No ${filter} reports for ${barangay}`}
+          {reports.length === 0
+            ? `No reports for ${barangay} yet`
+            : query && inFilter.length > 0
+              ? `No ${filter} reports match "${query.trim()}"`
+              : `No ${filter} reports for ${barangay}`}
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <ul className="grid gap-3 xl:grid-cols-2 xl:items-start">
           {visible.map((r) => (
-            <ReportCard key={r.id} barangay={barangay} report={r} onUpdated={onUpdated} onReject={() => setRejecting(r)}>
-              {/* Own barangay only; RLS also hides other barangays' threads. */}
-              {r.barangay === barangay && (
-                <ReportMessages reportId={r.id} viewerRole="barangay" userId={userId} latest={latest[r.id]} onLatest={updateLatest} />
-              )}
-            </ReportCard>
+            <li key={r.id}>
+              <ReportCard
+                report={r}
+                hasNew={newIds.has(r.id)}
+                onApprove={() => setReviewing({ report: r, decision: "approved" })}
+                onReject={() => setReviewing({ report: r, decision: "rejected" })}
+              >
+                {/* Own barangay only; RLS also hides other barangays' threads. Works on every status. */}
+                {r.barangay === barangay && (
+                  <ReportMessages reportId={r.id} viewerRole="barangay" userId={userId} latest={latest[r.id]} onLatest={updateLatest} />
+                )}
+              </ReportCard>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      {rejecting && (
-        <RejectDialog
-          barangay={barangay}
-          report={rejecting}
-          onClose={() => setRejecting(null)}
-          onDone={(updated) => {
-            setRejecting(null);
-            onUpdated(updated);
+      {reviewing && (
+        <ReportReviewDialog
+          report={reviewing.report}
+          decision={reviewing.decision}
+          onClose={() => setReviewing(null)}
+          onSave={async (reason) => {
+            const values =
+              reviewing.decision === "approved"
+                ? { status: "approved", approval_reason: reason, rejection_reason: null }
+                : { status: "rejected", rejection_reason: reason, approval_reason: null };
+            onUpdated(await updateReport(barangay, reviewing.report.id, values));
+            // Logged for the MDRRMO review-time analytics; a refused log never undoes the review.
+            void writeAuditLog(
+              reviewing.decision === "approved" ? "REPORT_APPROVED" : "REPORT_REJECTED",
+              `Barangay admin (${barangay})`,
+              `Report #${reviewing.report.id} ${reviewing.decision}: ${reason}`,
+            );
+            setReviewing(null);
           }}
         />
       )}
     </div>
+  );
+}
+
+/** Approve (approval_reason, 5-500 characters) or reject (rejection_reason) with ready messages. */
+export function ReportReviewDialog({
+  report,
+  decision,
+  onClose,
+  onSave,
+}: {
+  report: { location: string | null; user_name: string | null };
+  decision: "approved" | "rejected";
+  onClose: () => void;
+  onSave: (reason: string) => Promise<void>;
+}) {
+  const approve = decision === "approved";
+  return (
+    <ReasonDialog
+      title={approve ? "Approve report" : "Reject report"}
+      subtitle={`${report.location?.trim() || "Unknown location"} · by ${displayReporterName(report.user_name)}`}
+      presets={approve ? REPORT_APPROVE_REASONS : REPORT_REJECT_REASONS}
+      confirmLabel={approve ? "Approve" : "Reject"}
+      danger={!approve}
+      minLength={approve ? 5 : 3}
+      maxLength={500}
+      onClose={onClose}
+      onConfirm={onSave}
+    />
   );
 }
 
@@ -170,132 +233,107 @@ async function updateReport(barangay: string, id: number, values: Record<string,
   return data[0] as unknown as BarangayReport;
 }
 
+/** Small lazy-loaded thumbnail; opens the full photo in a new tab. */
+export function ReportThumb({ src, alt = "Photo sent with the report" }: { src: string; alt?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+        <ImageOff size={14} aria-hidden="true" /> Photo unavailable
+      </span>
+    );
+  }
+  return (
+    <a href={src} target="_blank" rel="noopener noreferrer" className="inline-block" aria-label="Open the full photo in a new tab">
+      <img src={src} alt={alt} loading="lazy" decoding="async" width={128} height={96} className="h-24 w-32 rounded-xl object-cover" onError={() => setFailed(true)} />
+    </a>
+  );
+}
+
 function ReportCard({
-  barangay,
   report,
-  onUpdated,
+  hasNew,
+  onApprove,
   onReject,
   children,
 }: {
-  barangay: string;
   report: BarangayReport;
-  onUpdated: (r: BarangayReport) => void;
+  hasNew: boolean;
+  onApprove: () => void;
   onReject: () => void;
   children?: ReactNode;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const pending = !isApprovedStatus(report.status) && report.status !== "rejected";
   const hasCoords = report.lat != null && report.lng != null;
-
-  const approve = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      onUpdated(await updateReport(barangay, report.id, { status: "approved", rejection_reason: null }));
-    } catch (err) {
-      setError(errorMessage(err, "Unable to approve this report."));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const summary = (
+    <span className="block space-y-1">
+      <span className="flex flex-wrap items-center gap-1.5">
+        <StatusBadge status={report.status} />
+        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{report.barangay ?? "No barangay"}</span>
+        {hasNew && <NewDot />}
+      </span>
+      <span className="block truncate text-sm font-bold" style={{ color: "var(--text-primary)" }}>{report.location?.trim() || "Unknown location"}</span>
+      <span className="flex flex-wrap items-center gap-x-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+        <span className="inline-flex items-center gap-1"><Droplets size={12} aria-hidden="true" /> {waterLevelLabel(report.water_level)}</span>
+        <span>{formatManilaDateTime(report.timestamp)}</span>
+      </span>
+    </span>
+  );
 
   return (
-    <article id={`report-${report.id}`} className="clay space-y-3 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-bold" style={{ color: "var(--text-primary)" }}>{report.location?.trim() || "Unknown location"}</p>
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            By {displayReporterName(report.user_name)} · {formatManilaDateTime(report.timestamp)}
-          </p>
+    <DisclosureCard id={`report-${report.id}`} summary={summary} label={`Report at ${report.location?.trim() || "unknown location"}, ${report.status}. Show details`}>
+      <div className="space-y-3 border-t pt-3">
+        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>By {displayReporterName(report.user_name)}</p>
+        {report.description && <p className="whitespace-pre-wrap break-words text-sm font-normal">{report.description}</p>}
+        <div className="flex flex-wrap items-end gap-3">
+          {report.photo_path && <ReportThumb src={report.photo_path} />}
+          {hasCoords && (
+            <a
+              href={`https://www.google.com/maps?q=${report.lat},${report.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-semibold underline"
+              style={{ color: "var(--primary-shade)" }}
+            >
+              <MapPin size={14} aria-hidden="true" /> View on map
+            </a>
+          )}
         </div>
-        <StatusBadge status={report.status} />
-      </div>
-      <p className="flex items-center gap-2 text-sm" style={{ color: "var(--text-primary)" }}>
-        <Droplets size={16} aria-hidden="true" style={{ color: "var(--primary-shade)" }} /> {waterLevelLabel(report.water_level)}
-        {hasCoords && (
-          <a
-            href={`https://www.google.com/maps?q=${report.lat},${report.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-2 inline-flex items-center gap-1 font-semibold underline"
-            style={{ color: "var(--primary-shade)" }}
-          >
-            <MapPin size={14} aria-hidden="true" /> View on map
-          </a>
-        )}
-      </p>
-      {report.description && <p className="whitespace-pre-wrap break-words text-sm">{report.description}</p>}
-      {report.photo_path && <img src={report.photo_path} alt="Photo sent with the report" className="max-h-64 w-full rounded-2xl object-cover" />}
-      {report.status === "rejected" && report.rejection_reason && (
-        <p className="text-sm"><span className="font-semibold">Rejection reason:</span> {report.rejection_reason}</p>
-      )}
-      {error && <ErrorBox text={error} />}
-      {(pending || report.status === "rejected" || isApprovedStatus(report.status)) && (
+        <ReviewReasons report={report} />
         <div className="flex flex-wrap gap-2 pt-1">
           {!isApprovedStatus(report.status) && (
-            <button type="button" className="clay-btn clay-btn-primary" disabled={busy} onClick={() => void approve()}>
-              {busy ? <Loader size={16} className="animate-spin" aria-hidden="true" /> : <CheckCircle size={16} aria-hidden="true" />} Approve
+            <button type="button" className="clay-btn clay-btn-primary" onClick={onApprove}>
+              <CheckCircle size={16} aria-hidden="true" /> Approve
             </button>
           )}
           {report.status !== "rejected" && (
-            <button type="button" className="clay-btn clay-btn-secondary" disabled={busy} onClick={onReject}>
+            <button type="button" className="clay-btn clay-btn-secondary" onClick={onReject}>
               <XCircle size={16} aria-hidden="true" /> Reject
             </button>
           )}
         </div>
-      )}
-      {children}
-    </article>
+        {children}
+      </div>
+    </DisclosureCard>
   );
 }
 
-function RejectDialog({ barangay, report, onClose, onDone }: { barangay: string; report: BarangayReport; onClose: () => void; onDone: (r: BarangayReport) => void }) {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    ref.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [busy, onClose]);
-
-  const save = async () => {
-    const text = reason.trim();
-    if (!text || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      onDone(await updateReport(barangay, report.id, { status: "rejected", rejection_reason: text }));
-    } catch (err) {
-      setError(errorMessage(err, "Unable to reject this report."));
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby="reject-title" className="clay w-full max-w-md space-y-4 p-6">
-        <h3 id="reject-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Reject report</h3>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{report.location?.trim() || "Unknown location"} · by {displayReporterName(report.user_name)}</p>
-        <label className="block">
-          <span className="clay-label">Reason (required, shown to the resident)</span>
-          <textarea ref={ref} className="clay-input min-h-24" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} disabled={busy} />
-        </label>
-        {error && <ErrorBox text={error} />}
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button type="button" className="clay-btn clay-btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className="clay-btn clay-btn-primary" disabled={busy || !reason.trim()} onClick={() => void save()}>
-            {busy ? "Saving..." : "Reject"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+/** Approval or rejection reason, as the resident sees it. */
+export function ReviewReasons({ report }: { report: { status: string | null; approval_reason?: string | null; rejection_reason: string | null } }) {
+  if (isApprovedStatus(report.status) && report.approval_reason?.trim()) {
+    return (
+      <p className="bg-white px-3 py-2 text-sm font-normal" style={{ borderLeft: "4px solid var(--risk-low)", color: "var(--text-primary)" }}>
+        <span className="font-semibold">Approval reason:</span> {report.approval_reason}
+      </p>
+    );
+  }
+  if (report.status === "rejected" && report.rejection_reason?.trim()) {
+    return (
+      <p className="bg-white px-3 py-2 text-sm font-normal" style={{ borderLeft: "4px solid var(--risk-high)", color: "var(--text-primary)" }}>
+        <span className="font-semibold">Rejection reason:</span> {report.rejection_reason}
+      </p>
+    );
+  }
+  return null;
 }
 
 export function QuickReportsSection({

@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Camera, CheckCircle2, MapPin, Send, Image, MessageSquare, Navigation, Loader, Users } from "lucide-react";
+import { Camera, CheckCircle2, MapPin, Send, Image, Navigation, Loader, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { subscribeToTable } from "../../lib/realtime";
 import { ClayButton, ClayCard, RiskBadge, ScreenHeader, type RiskLevel } from "./clay/Clay";
+import { DisclosureCard } from "./alerts/AlertDisclosure";
+import { ReportThumb } from "./barangay/BarangayReports";
+import { ReportQueryBar } from "./ReportQueryBar";
+import { queryReports, type ReportSort } from "../../lib/reportQuery";
 
 type ReportRow = {
   id: number;
@@ -82,6 +86,9 @@ export function CommunityReports() {
   const [location, setLocation] = useState("");
   const [waterLevel, setWaterLevel] = useState("ankle");
   const [description, setDescription] = useState("");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ReportSort>("newest");
+  const shownReports = queryReports(reports, query, sort);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const resetForm = () => {
@@ -245,7 +252,7 @@ export function CommunityReports() {
 
       if ((existingPendingReport ?? []).length > 0) {
         resetForm();
-        alert("Your report is already submitted. Please wait for the MDRRMO approval.");
+        alert("Your report is already submitted. Please wait for your barangay or the MDRRMO to review it.");
         return;
       }
 
@@ -438,81 +445,73 @@ export function CommunityReports() {
           </ClayCard>
         )}
 
-        <h2 className="text-lg font-bold mb-4" style={{ color: "var(--text-primary)" }}>Recent Reports</h2>
-        <div className="space-y-4 pb-6">
+        <h2 className="text-lg font-bold mb-3" style={{ color: "var(--text-primary)" }}>Recent Reports</h2>
+        {!loading && reports.length > 0 && (
+          <div className="mb-3">
+            <ReportQueryBar
+              query={query}
+              onQuery={setQuery}
+              sort={sort}
+              onSort={setSort}
+              shown={shownReports.length}
+              total={reports.length}
+              withMessageSort={false}
+              placeholder="Search location, description or reporter"
+            />
+          </div>
+        )}
+        <div className="space-y-3 pb-6">
           {loading ? (
             <p className="text-sm text-gray-500">Loading reports...</p>
           ) : reports.length === 0 ? (
             <p className="text-sm text-gray-500">No reports yet. Be the first to submit one.</p>
+          ) : shownReports.length === 0 ? (
+            <p className="text-sm text-gray-500">No reports match "{query.trim()}".</p>
           ) : (
-            reports.map((report) => (
-              <ClayCard key={report.id} radius={22} className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold" style={{ background: "var(--lavender)", color: "var(--lavender-icon)" }}>
-                      {report.user_name?.charAt(0)?.toUpperCase() ?? "R"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{report.user_name}</p>
-                      <p className="text-xs text-gray-500">{formatTimeAgo(report.timestamp)}</p>
-                    </div>
-                  </div>
-                  {report.status === "approved" && (
-                    <span className="risk-badge risk-badge-low is-compact">
-                      <CheckCircle2 size={12} aria-hidden="true" />
-                      Verified
+            shownReports.map((report) => (
+              <DisclosureCard
+                key={report.id}
+                id={`report-${report.id}`}
+                label={`Report at ${report.location || "unknown location"} by ${report.user_name}. Show details`}
+                summary={
+                  <span className="block space-y-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="risk-badge risk-badge-low is-compact">
+                        <CheckCircle2 size={12} aria-hidden="true" />
+                        Verified
+                      </span>
+                      <RiskBadge risk={getLevelRisk(report.water_level)} compact />
                     </span>
+                    <span className="flex min-w-0 items-center gap-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      <MapPin size={14} aria-hidden="true" className="shrink-0" />
+                      <span className="truncate">{report.location}</span>
+                    </span>
+                    <span className="block text-xs" style={{ color: "var(--text-secondary)" }}>
+                      <span className="capitalize">{report.water_level}</span> water · {formatTimeAgo(report.timestamp)}
+                    </span>
+                  </span>
+                }
+              >
+                <div className="space-y-3 border-t pt-3">
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    By {report.user_name}
+                    {report.lat != null && report.lng != null ? ` · GPS ${report.lat.toFixed(5)}, ${report.lng.toFixed(5)}` : ""}
+                  </p>
+                  {report.description && <p className="text-sm font-normal text-gray-700">{report.description}</p>}
+                  {report.photo_path && <ReportThumb src={report.photo_path} alt="Flood report photo" />}
+                  {report.admin_reply && (
+                    <div className="rounded-2xl border bg-white p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "var(--primary-shade)" }}>Reply from MDRRMO:</p>
+                      <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>{report.admin_reply}</p>
+                      {report.admin_reply_at && (
+                        <p className="mt-2 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                          Sent {new Date(report.admin_reply_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
-
-                {report.photo_path && (
-                  <img
-                    src={report.photo_path}
-                    alt="Flood report"
-                    className="w-full h-40 object-cover rounded-lg mb-3"
-                  />
-                )}
-
-                <div className="flex items-start gap-2 mb-2">
-                  <MapPin size={16} className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-gray-600">{report.location}</p>
-                    <p className="text-xs text-gray-500 font-mono">
-                      GPS: {report.lat?.toFixed(6) ?? "-"}, {report.lng?.toFixed(6) ?? "-"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                  <RiskBadge risk={getLevelRisk(report.water_level)} compact />
-                  <p className="text-sm capitalize" style={{ color: "var(--text-primary)" }}>{report.water_level} water level</p>
-                </div>
-
-                <p className="text-sm text-gray-700 mb-3">{report.description}</p>
-
-                {report.admin_reply && (
-                  <div className="mb-3 rounded-2xl border bg-white p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "var(--primary-shade)" }}>Reply from MDRRMO:</p>
-                    <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>{report.admin_reply}</p>
-                    {report.admin_reply_at && (
-                      <p className="mt-2 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                        Sent {new Date(report.admin_reply_at).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-4 pt-3 border-t border-gray-100">
-                  <button className="flex min-h-12 items-center gap-1 text-sm text-gray-600 hover:text-blue-600">
-                    <MessageSquare size={16} />
-                    <span>Comment</span>
-                  </button>
-                  <button className="flex min-h-12 items-center gap-1 text-sm text-gray-600 hover:text-blue-600">
-                    <Send size={16} />
-                    <span>Share</span>
-                  </button>
-                </div>
-              </ClayCard>
+              </DisclosureCard>
             ))
           )}
         </div>
@@ -526,7 +525,7 @@ export function CommunityReports() {
             </div>
             <h3 className="text-lg font-semibold mb-2">Report Submitted</h3>
             <p className="text-sm text-gray-600 mb-6">
-              Your report has been submitted. Please wait for the MDRRMO&apos;s approval before it
+              Your report has been submitted. Please wait for your barangay or the MDRRMO to approve it before it
               appears in the community feed.
             </p>
             <button

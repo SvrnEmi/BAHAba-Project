@@ -3,6 +3,14 @@ import { useNavigate } from "react-router";
 import { User, Mail, Lock, Eye, EyeOff, Phone, MapPin } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
+import { useBarangayNames } from "../../lib/barangays";
+import {
+  ALREADY_REGISTERED_MESSAGE,
+  isAlreadyRegistered,
+  isDuplicateSignUp,
+  logAuthError,
+  registerErrorMessage,
+} from "../../lib/authErrors";
 import { BrandLogo } from "./BrandLogo";
 import { BackToWelcome } from "./BackToWelcome";
 
@@ -11,6 +19,10 @@ export function Register() {
   const { refreshProfile } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // takenEmail is set when the message should offer a "Log in" button.
+  const [formError, setFormError] = useState<{ text: string; takenEmail?: string } | null>(null);
+  // Signed out, RLS hides the table, so this usually stays on the official list.
+  const barangays = useBarangayNames();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -39,11 +51,13 @@ export function Register() {
       return;
     }
 
+    const email = formData.email.trim();
+    setFormError(null);
     setIsSubmitting(true);
 
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email.trim(),
+        email,
         password: formData.password,
         options: {
           data: {
@@ -57,6 +71,11 @@ export function Register() {
 
       if (signUpError) {
         throw signUpError;
+      }
+
+      if (isDuplicateSignUp(data)) {
+        setFormError({ text: ALREADY_REGISTERED_MESSAGE, takenEmail: email });
+        return;
       }
 
       if (data.session && data.user) {
@@ -91,13 +110,18 @@ export function Register() {
         confirmPassword: "",
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Unable to create account. Please try again.");
+      logAuthError("Registration", err);
+      setFormError({
+        text: registerErrorMessage(err),
+        takenEmail: isAlreadyRegistered(err) ? email : undefined,
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormError(null);
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -181,11 +205,9 @@ export function Register() {
                 required
               >
                 <option value="">Select your barangay</option>
-                <option value="Tuburan">Barangay Tuburan</option>
-                <option value="Gabawan">Barangay Gabawan</option>
-                <option value="Ligaya">Barangay Ligaya</option>
-                <option value="Luntad">Barangay Luntad</option>
-                <option value="Poblacion">Barangay Poblacion</option>
+                {barangays.map((name) => (
+                  <option key={name} value={name}>Barangay {name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -246,6 +268,21 @@ export function Register() {
               I agree to the Terms of Service and Privacy Policy
             </label>
           </div>
+
+          {formError && (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formError.text}
+              {formError.takenEmail && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/login", { state: { email: formError.takenEmail } })}
+                  className="clay-btn clay-btn-secondary mt-2 w-full"
+                >
+                  Log in
+                </button>
+              )}
+            </div>
+          )}
 
           <button
             type="submit"

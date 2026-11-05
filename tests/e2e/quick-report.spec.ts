@@ -24,7 +24,7 @@ type Row = Record<string, unknown>;
 const baseRow = (id: number, extra: Row = {}): Row => ({
   id,
   created_at: "2026-10-17T02:00:00Z",
-  barangay: "Poblacion",
+  barangay: "Poctoy",
   landmark: "Near the plaza",
   lat: 12.4018,
   lng: 122.0234,
@@ -86,7 +86,7 @@ const pngFile = () => ({
 
 async function fillMinimal(page: Page) {
   await page.getByRole("button", { name: "Knee" }).click();
-  await page.locator("select").selectOption("Poblacion");
+  await page.locator("select").selectOption("Poctoy");
 }
 
 test.describe("Quick Report (public)", () => {
@@ -145,7 +145,7 @@ test.describe("Quick Report (public)", () => {
     await expect(page.getByRole("button", { name: "Send another" })).toBeVisible();
 
     const submit = calls.fn.find((c) => c.action === "submit")!;
-    expect(submit).toMatchObject({ water_level: "knee", barangay: "Poblacion", website: "" });
+    expect(submit).toMatchObject({ water_level: "knee", barangay: "Poctoy", website: "" });
     expect(String(submit.device_id)).toMatch(/^[0-9a-f-]{36}$/);
     expect(calls.fn[0].device_id).toBe(submit.device_id);
     expect(await page.evaluate(() => localStorage.getItem("bahaba_device_id"))).toBe(submit.device_id);
@@ -175,6 +175,37 @@ test.describe("Quick Report (public)", () => {
     await page.getByRole("button", { name: "Send Quick Report" }).click();
     await expect(page.getByText("Daily limit reached for this network.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send Quick Report" })).toBeEnabled();
+  });
+
+  test("the function's own error is shown, and a network block keeps its message", async ({ page, context }) => {
+    const send = async () => {
+      await page.goto("/quick-report");
+      await fillMinimal(page);
+      await page.getByRole("button", { name: "Send Quick Report" }).click();
+    };
+    await mockBackend(context, { submitStatus: 400, submit: { error: "Unknown barangay" } });
+    await send();
+    await expect(page.getByText("Unknown barangay")).toBeVisible();
+
+    const network = "Quick Report is not available from this network.";
+    await context.unrouteAll();
+    await mockBackend(context, { submitStatus: 403, submit: { error: network, code: "blocked" } });
+    await send();
+    await expect(page.getByText(network)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send Quick Report" })).toHaveCount(0);
+  });
+
+  test("a plain-text error from the function is shown", async ({ page, context }) => {
+    await mockBackend(context);
+    await context.route(/\/functions\/v1\/quick-report/, async (route) => {
+      const body = JSON.parse(route.request().postData() ?? "{}") as Row;
+      if (body.action === "status") return route.fulfill({ json: { max: 3, remaining: 3, blocked: false } });
+      return route.fulfill({ status: 503, contentType: "text/plain", body: "Function is booting" });
+    });
+    await page.goto("/quick-report");
+    await fillMinimal(page);
+    await page.getByRole("button", { name: "Send Quick Report" }).click();
+    await expect(page.getByText("Function is booting")).toBeVisible();
   });
 
   test("photo is compressed, requested, and an upload failure is explained", async ({ page, context }) => {

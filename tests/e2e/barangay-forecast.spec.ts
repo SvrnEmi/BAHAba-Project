@@ -27,7 +27,7 @@ function session() {
 type BarangayRow = Record<string, unknown>;
 const baseRow = (overrides: BarangayRow): BarangayRow => ({
   id: 7,
-  name: "Poblacion",
+  name: "Poctoy",
   flood_risk: "low",
   risk_source: "auto",
   manual_override_until: null,
@@ -57,7 +57,7 @@ async function mock(context: BrowserContext, initial: BarangayRow) {
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
     const one = (row: unknown) => route.fulfill({ json: wantsObject ? row : row == null ? [] : [row] });
     if (req.method() === "HEAD") return route.fulfill({ status: 200, headers: { "content-range": "0-0/0" }, body: "" });
-    if (path === "profiles") return one({ id: ADMIN.id, role: "barangay", name: "Kap. Test", email: ADMIN.email, phone: null, barangay: "Poblacion" });
+    if (path === "profiles") return one({ id: ADMIN.id, role: "barangay", name: "Kap. Test", email: ADMIN.email, phone: null, barangay: "Poctoy" });
     if (path === "barangays") {
       state.barangaySelects.push(url.searchParams.get("select") ?? "");
       return one(state.row);
@@ -113,7 +113,7 @@ test("manual level below the forecast: warning, stale notice, Rising, and Return
   await expect(panel.getByRole("button", { name: "Return to automatic" })).toHaveCount(1);
   await panel.getByRole("button", { name: "Return to automatic" }).click();
   await expect(panel.getByText("Back to automatic: High risk.")).toBeVisible();
-  expect(state.rpcCalls).toEqual([{ p_barangay: "Poblacion" }]);
+  expect(state.rpcCalls).toEqual([{ p_barangay: "Poctoy" }]);
   await expect(panel.getByText("The forecast is higher than your setting.")).toHaveCount(0);
   await expect(panel.getByText("Automatic", { exact: true })).toBeVisible();
   await expect(panel.getByText("Steady", { exact: true })).toBeVisible();

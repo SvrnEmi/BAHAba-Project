@@ -1,56 +1,64 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Users,
   Bell,
   MapPin,
   Activity,
   Settings,
-  AlertTriangle,
   CheckCircle,
   Send,
-  Eye,
-  Download,
-  TrendingUp,
-  BarChart3,
   Radio,
   Smartphone,
   Clock,
   XCircle,
   Trash2,
   LogOut,
-  Waves
+  Waves,
+  History,
+  ChevronRight,
+  Droplets,
+  Download,
 } from "lucide-react";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Link, useNavigate } from "react-router";
+import { FloodEventsPanel } from "./FloodEventsPanel";
 import { supabase } from "../../lib/supabase";
 import { BrandLogo } from "./BrandLogo";
 import { RainfallForecastPanel } from "./RainfallForecastPanel";
 import { subscribeToTable } from "../../lib/realtime";
-import { useNavigate } from "react-router";
 import { useAuth } from "../../lib/auth";
 import { playNotificationSound, readAdminPopupPrefs } from "../../lib/adminPrefs";
 import { QuickReportsPanel, useQuickReportPendingCount } from "./QuickReportsPanel";
-import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
+import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type FeedAlert, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
 import { NewDot, ReportMessages } from "./ReportMessages";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../lib/reportMessages";
-
-// Alert Level Types (ISO Standard)
-type AlertLevel = "advisory" | "warning" | "critical";
-
-interface Alert {
-  id: number;
-  level: AlertLevel;
-  title: string;
-  message: string;
-  targetBarangay: string;
-  channels: "push"[];
-  sentAt: string;
-  recipients: number;
-  deliveryStatus: {
-    push: number;
-  };
-  createdBy: string;
-  status: string;
-}
+import { writeAuditLog } from "../../lib/audit";
+import { displayReporterName, waterLevelLabel } from "../../lib/reports";
+import { formatManilaDateTime } from "../../lib/barangayAdmin";
+import { useBarangayNames } from "../../lib/barangays";
+import {
+  ALERT_COLUMNS,
+  PAGASA,
+  PAGASA_LEVEL_OPTIONS,
+  alertPreviewText,
+  pagasaText,
+  toAlertRow,
+  type AlertLevel,
+  type AlertRow,
+} from "../../lib/alerts";
+import { AlertScrollList, CollapsibleAlertCard, DisclosureCard } from "./alerts/AlertDisclosure";
+import { BarangayBroadcastBox, useMdrrmoAlertActions } from "./alerts/MdrrmoAlertActions";
+import { InfoTip } from "./InfoTip";
+import { MdrrmoAnalytics } from "./MdrrmoAnalytics";
+import { ReportPager, ReportSearchControls } from "./ReportSearchControls";
+import {
+  REPORT_PAGE_SIZE,
+  SERVER_REPORT_COLUMNS,
+  cleanReportSearch,
+  useReportPage,
+  type ReportStatusFilter,
+  type ServerReportSort,
+} from "../../lib/reportServerQuery";
+import { ReportReviewDialog, ReportThumb, ReviewReasons } from "./barangay/BarangayReports";
 
 interface AuditLog {
   id: number;
@@ -73,21 +81,29 @@ interface Report {
   photo_path: string | null;
   admin_reply: string | null;
   admin_reply_at: string | null;
+  rejection_reason: string | null;
+  approval_reason: string | null;
+  user_id: string | null;
+  barangay: string | null;
 }
+
+const REPORT_COLUMNS = SERVER_REPORT_COLUMNS;
 
 interface ReviewToast {
   id: number;
   kind: "report" | "alert";
   title: string;
   description: string;
-  tab: "reports" | "verify-alerts";
+  tab: "reports" | "overview";
 }
 
 const STAT_PASTELS = ["lavender", "peach", "mint"] as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function MDRRMOAdminDashboard() {
   const navigate = useNavigate();
   const { session, signOut } = useAuth();
+  const adminEmail = session?.user.email ?? "MDRRMO Admin";
   const [loggingOut, setLoggingOut] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(96);
@@ -95,26 +111,50 @@ export function MDRRMOAdminDashboard() {
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [showNotification, setShowNotification] = useState(false);
-  const [pendingReviewSummary, setPendingReviewSummary] = useState<{ pendingReportsCount: number; pendingAlertsCount: number } | null>(null);
+  const [pendingReviewSummary, setPendingReviewSummary] = useState<{ pendingReportsCount: number } | null>(null);
   const [reviewToasts, setReviewToasts] = useState<ReviewToast[]>([]);
-  const [selectedAlertLevel, setSelectedAlertLevel] = useState<AlertLevel>("warning");
   const [reports, setReports] = useState<Report[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+  const [reviewingReport, setReviewingReport] = useState<{ report: Report; decision: "approved" | "rejected" } | null>(null);
   const summaryShownRef = useRef(false);
   const toastIdRef = useRef(0);
 
   // Pending Quick Reports for the tab badge (shares the quick_reports channel with the panel).
   const quickReportsPending = useQuickReportPendingCount();
   // Recent updates: derived from the reports/alerts state below (no extra queries or channels).
-  const recentUpdates = useRecentUpdates(reports, alerts, loadingData, session?.user.id ?? null);
+  const feedAlerts = useMemo<FeedAlert[]>(
+    () =>
+      alerts.map((a) => ({
+        id: a.id,
+        title: `[${pagasaText(a.level)}] ${a.title}`,
+        targetBarangay: a.target_barangay,
+        sentAt: a.sent_at ?? "",
+        createdBy: a.created_by ?? "System",
+        status: a.status,
+      })),
+    [alerts],
+  );
+  const recentUpdates = useRecentUpdates(reports, feedAlerts, loadingData, session?.user.id ?? null);
   // Latest message per report, for the "New" dots on the Reports tab.
   const { latest: latestMessages, update: updateLatestMessage } = useLatestMessages(reports.map((report) => report.id));
   const reportsHaveNewMessages = reports.some((report) =>
     hasNewMessage(latestMessages[report.id], "mdrrmo", session?.user.id ? getThreadLastSeen(session.user.id, report.id) : 0),
   );
+
+  const upsertAlert = (row: AlertRow) =>
+    setAlerts((current) => [row, ...current.filter((a) => a.id !== row.id)].sort((a, b) => (b.sent_at ?? "").localeCompare(a.sent_at ?? "")));
+  const dropAlert = (id: number) => setAlerts((current) => current.filter((a) => a.id !== id));
+  const { actions: alertActions, dialogs: alertDialogs } = useMdrrmoAlertActions(adminEmail, upsertAlert, dropAlert);
+
+  // Clock for relative times (no data requests).
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Header height drives the sticky Recent updates column's offset.
   useEffect(() => {
@@ -147,9 +187,6 @@ export function MDRRMOAdminDashboard() {
     if (item.source === "report") {
       setActiveTab("reports");
       setFocusTarget(`report-${item.sourceId}`);
-    } else if (item.sourceStatus === "pending") {
-      setActiveTab("verify-alerts");
-      setFocusTarget(`verify-alert-${item.sourceId}`);
     } else {
       setActiveTab("alerts");
       setFocusTarget(`alert-history-${item.sourceId}`);
@@ -172,7 +209,7 @@ export function MDRRMOAdminDashboard() {
     setReviewToasts((current) => current.filter((toast) => toast.id !== toastId));
   };
 
-  const queueReviewToast = (kind: "report" | "alert", title: string, description: string, tab: "reports" | "verify-alerts") => {
+  const queueReviewToast = (kind: "report" | "alert", title: string, description: string, tab: ReviewToast["tab"]) => {
     // Read on every new item so changes made in Settings apply immediately.
     const prefs = readAdminPopupPrefs();
     if (kind === "report" ? !prefs.pendingReports : !prefs.barangayAlerts) return;
@@ -191,10 +228,10 @@ export function MDRRMOAdminDashboard() {
 
     const loadDashboardData = async () => {
       const [{ data: reportData, error: reportError }, { data: alertData }, { count }, { data: auditData }] = await Promise.all([
-        supabase.from("community_reports").select("*").order("timestamp", { ascending: false }),
-        supabase.from("alerts").select("*", { count: "exact" }).order("sent_at", { ascending: false }),
+        supabase.from("community_reports").select(REPORT_COLUMNS).order("timestamp", { ascending: false }),
+        supabase.from("alerts").select(ALERT_COLUMNS).order("sent_at", { ascending: false }).limit(500),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("audit_logs").select("*").order("timestamp", { ascending: false }),
+        supabase.from("audit_logs").select("id, action, user_name, timestamp, details").order("timestamp", { ascending: false }),
       ]);
 
       if (cancelled) return;
@@ -202,21 +239,9 @@ export function MDRRMOAdminDashboard() {
       if (reportError) {
         alert(`Unable to load community reports: ${reportError.message}`);
       }
-      const mappedAlerts = (((alertData as Array<Record<string, unknown>>) ?? []).map((alert) => ({
-        id: Number(alert.id),
-        level: (alert.level as AlertLevel) ?? "advisory",
-        title: String(alert.title ?? ""),
-        message: String(alert.message ?? ""),
-        targetBarangay: String(alert.target_barangay ?? "All Barangays"),
-        channels: ["push"] as ["push"],
-        sentAt: String(alert.sent_at ?? ""),
-        recipients: Number(alert.recipients ?? 0),
-        deliveryStatus: { push: 0 },
-        createdBy: String(alert.created_by ?? "System"),
-        status: String(alert.status ?? "pending"),
-      })) as Alert[]);
+      const mappedAlerts = ((alertData as Array<Record<string, unknown>>) ?? []).map(toAlertRow);
 
-      setReports((reportData as Report[]) ?? []);
+      setReports((reportData as unknown as Report[]) ?? []);
       setAlerts(mappedAlerts);
       setUserCount(count ?? 0);
       setAuditLogs(((auditData as Array<Record<string, unknown>>) ?? []).map((log) => ({
@@ -229,11 +254,10 @@ export function MDRRMOAdminDashboard() {
       setLoadingData(false);
 
       if (!summaryShownRef.current) {
-        const pendingReportsCount = ((reportData as Report[] | null) ?? []).filter((report) => report.status === "pending").length;
-        const pendingAlertsCount = mappedAlerts.filter((alert) => alert.status === "pending").length;
+        const pendingReportsCount = ((reportData as unknown as Report[] | null) ?? []).filter((report) => report.status === "pending").length;
 
-        if (pendingReportsCount > 0 || pendingAlertsCount > 0) {
-          setPendingReviewSummary({ pendingReportsCount, pendingAlertsCount });
+        if (pendingReportsCount > 0) {
+          setPendingReviewSummary({ pendingReportsCount });
         }
         summaryShownRef.current = true;
       }
@@ -241,73 +265,43 @@ export function MDRRMOAdminDashboard() {
 
     void loadDashboardData();
 
+    // Shared channels (subscribeToTable removes them with supabase.removeChannel on cleanup).
     const unsubscribeReports = subscribeToTable("community_reports", (payload) => {
-        if (payload.eventType === "INSERT") {
-          const report = payload.new as Report;
-          setReports((current) => [report, ...current.filter((item) => item.id !== report.id)]);
+      if (cancelled) return;
+      if (payload.eventType === "INSERT") {
+        const report = payload.new as unknown as Report;
+        setReports((current) => [report, ...current.filter((item) => item.id !== report.id)]);
 
-          if (report.status === "pending") {
-            queueReviewToast(
-              "report",
-              `New flood report submitted by ${report.user_name || "a resident"} — awaiting review.`,
-              "Review report",
-              "reports"
-            );
-          }
-        } else if (payload.eventType === "UPDATE") {
-          const report = payload.new as Report;
-          setReports((current) => current.map((item) => item.id === report.id ? report : item));
-        } else if (payload.eventType === "DELETE") {
-          const deletedReport = payload.old as Partial<Report>;
-          setReports((current) => current.filter((item) => item.id !== deletedReport.id));
+        if (report.status === "pending") {
+          queueReviewToast(
+            "report",
+            `New flood report submitted by ${report.user_name || "a resident"} — awaiting review.`,
+            "Review report",
+            "reports"
+          );
         }
+      } else if (payload.eventType === "UPDATE") {
+        const report = payload.new as unknown as Report;
+        setReports((current) => current.map((item) => item.id === report.id ? report : item));
+      } else if (payload.eventType === "DELETE") {
+        const deletedReport = payload.old as Partial<Report>;
+        setReports((current) => current.filter((item) => item.id !== deletedReport.id));
+      }
     });
 
     const unsubscribeAlerts = subscribeToTable("alerts", (payload) => {
-        if (payload.eventType === "INSERT") {
-          const incomingAlert = payload.new as Record<string, unknown>;
-          const mappedAlert: Alert = {
-            id: Number(incomingAlert.id ?? 0),
-            level: (incomingAlert.level as AlertLevel) ?? "advisory",
-            title: String(incomingAlert.title ?? ""),
-            message: String(incomingAlert.message ?? ""),
-            targetBarangay: String(incomingAlert.target_barangay ?? "All Barangays"),
-            channels: ["push"],
-            sentAt: String(incomingAlert.sent_at ?? ""),
-            recipients: Number(incomingAlert.recipients ?? 0),
-            deliveryStatus: { push: 0 },
-            createdBy: String(incomingAlert.created_by ?? "System"),
-            status: String(incomingAlert.status ?? "pending"),
-          };
-
-          setAlerts((current) => [mappedAlert, ...current.filter((item) => item.id !== mappedAlert.id)]);
-
-          if (mappedAlert.status === "pending") {
-            queueReviewToast(
-              "alert",
-              `New alert submitted by Barangay ${mappedAlert.targetBarangay} — awaiting review.`,
-              "Review alert",
-              "verify-alerts"
-            );
-          }
-        } else if (payload.eventType === "UPDATE") {
-          const incomingAlert = payload.new as Record<string, unknown>;
-          const mappedAlert: Alert = {
-            id: Number(incomingAlert.id ?? 0),
-            level: (incomingAlert.level as AlertLevel) ?? "advisory",
-            title: String(incomingAlert.title ?? ""),
-            message: String(incomingAlert.message ?? ""),
-            targetBarangay: String(incomingAlert.target_barangay ?? "All Barangays"),
-            channels: ["push"],
-            sentAt: String(incomingAlert.sent_at ?? ""),
-            recipients: Number(incomingAlert.recipients ?? 0),
-            deliveryStatus: { push: 0 },
-            createdBy: String(incomingAlert.created_by ?? "System"),
-            status: String(incomingAlert.status ?? "pending"),
-          };
-
-          setAlerts((current) => current.map((item) => item.id === mappedAlert.id ? mappedAlert : item));
-        }
+      if (cancelled) return;
+      if (payload.eventType === "DELETE") {
+        const id = Number((payload.old as { id?: unknown }).id);
+        setAlerts((current) => current.filter((item) => item.id !== id));
+        return;
+      }
+      const row = toAlertRow(payload.new as Record<string, unknown>);
+      setAlerts((current) => [row, ...current.filter((item) => item.id !== row.id)].sort((a, b) => (b.sent_at ?? "").localeCompare(a.sent_at ?? "")));
+      if (payload.eventType !== "INSERT") return;
+      if (row.source === "barangay") {
+        queueReviewToast("alert", `Barangay ${row.target_barangay} published ${alertPreviewText(row)}.`, "Open barangay alerts", "overview");
+      }
     });
 
     return () => {
@@ -317,94 +311,94 @@ export function MDRRMOAdminDashboard() {
     };
   }, []);
 
-  const isApprovedReportStatus = (status: string) => status === "approved" || status === "verified";
+  // Community Reports tab: server-side search, status filter, sort and pages.
+  const [reportSearchInput, setReportSearchInput] = useState("");
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportSort, setReportSort] = useState<ServerReportSort>("newest");
+  const [reportStatus, setReportStatus] = useState<ReportStatusFilter>("all");
+  const [reportPage, setReportPage] = useState(1);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const next = cleanReportSearch(reportSearchInput);
+      if (next !== reportSearch) {
+        setReportSearch(next);
+        setReportPage(1);
+      }
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [reportSearchInput, reportSearch]);
+  // `reports` changes on every realtime event and local review/delete, so the page reloads in place.
+  const reportList = useReportPage<Report>({ search: reportSearch, status: reportStatus, sort: reportSort, page: reportPage }, reports);
+  const reportMatching = reportList.counts[reportStatus];
+  const reportPages = Math.max(1, Math.ceil(reportMatching / REPORT_PAGE_SIZE));
+  // A delete can empty the last page: step back to the new last page.
+  useEffect(() => {
+    if (!reportList.loading && reportPage > reportPages) setReportPage(reportPages);
+  }, [reportList.loading, reportPage, reportPages]);
+  const reportFiltered = reportSearch !== "" || reportStatus !== "all";
+  const clearReportSearch = () => {
+    setReportSearchInput("");
+    setReportSearch("");
+    setReportStatus("all");
+    setReportPage(1);
+  };
 
-  // Analytics Data
-  const reportTrendsData = Array.from({ length: 5 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (4 - index));
-    const dayReports = reports.filter((report) => new Date(report.timestamp).toDateString() === date.toDateString());
-    return { date: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }), reports: dayReports.length, verified: dayReports.filter((report) => isApprovedReportStatus(report.status)).length, rejected: dayReports.filter((report) => report.status === "rejected").length };
-  });
+  const pendingReports = reports.filter((report) => report.status === "pending");
 
-  const reportLocations = reports.reduce<Record<string, number>>((counts, report) => {
-    const name = report.location.trim() || "Unknown";
-    counts[name] = (counts[name] ?? 0) + 1;
-    return counts;
-  }, {});
-  const barangayReportsData = Object.entries(reportLocations).map(([name, reportCount]) => ({ name, reports: reportCount }));
-  const alertDistributionData = (["advisory", "warning", "critical"] as AlertLevel[]).map((level) => ({
-    name: level[0].toUpperCase() + level.slice(1),
-    value: alerts.filter((alert) => alert.level === level).length,
-    color: level === "advisory" ? "#3b82f6" : level === "warning" ? "#eab308" : "#ef4444",
-  }));
-  const userParticipationData = [{ month: new Date().toLocaleDateString(undefined, { month: "short" }), activeUsers: userCount, reports: reports.length }];
-
-  // System Stats
+  // Overview cards: every number comes from the loaded tables.
   const stats = [
     {
-      label: "Active Users",
+      label: "Registered users",
       value: userCount.toLocaleString(),
-      change: "+12.5%",
       icon: Users,
-      color: "bg-blue-500",
-      trend: "up"
+      info: "All accounts in BAHAba (residents, barangay admins and MDRRMO), counted from the profiles table.",
     },
     {
-      label: "Alerts Sent (24h)",
-      value: alerts.filter((alert) => Date.now() - new Date(alert.sentAt).getTime() < 86400000).length.toString(),
-      change: "+15",
+      label: "Alerts sent (24h)",
+      value: alerts.filter((alert) => alert.status === "approved" && now - new Date(alert.sent_at ?? 0).getTime() < DAY_MS).length.toString(),
       icon: Bell,
-      color: "bg-yellow-500",
-      trend: "up"
+      info: "Published alerts sent in the last 24 hours from every source (barangay, MDRRMO and automatic). Withdrawn alerts are not counted.",
     },
     {
-      label: "Pending Reports",
-      value: reports.filter((report) => report.status === "pending").length.toString(),
-      change: "-8",
+      label: "Pending reports",
+      value: pendingReports.length.toString(),
       icon: MapPin,
-      color: "bg-orange-500",
-      trend: "down"
+      info: "Community reports from signed-in residents that no barangay admin or MDRRMO has approved or rejected yet.",
     },
     {
-      label: "System Uptime",
-      value: "99.9%",
-      change: "Excellent",
-      icon: Activity,
-      color: "bg-green-500",
-      trend: "stable"
+      label: "Pending Quick Reports",
+      value: quickReportsPending == null ? "--" : String(quickReportsPending),
+      icon: Waves,
+      info: "Quick Reports (sent without an account) waiting for MDRRMO review, not counting reports flagged as false.",
     },
   ];
 
   const [newAlert, setNewAlert] = useState({
     level: "warning" as AlertLevel,
     message: "",
-    channels: {
-      push: true,
-    }
   });
   const [selectedBarangays, setSelectedBarangays] = useState<string[]>([]);
   const [allBarangays, setAllBarangays] = useState(true);
   const [targetBarangayError, setTargetBarangayError] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
-  const barangays = ["Tuburan", "Poctoy", "Gabawan", "Batiano", "Panique", "Libertad", "Canjalon", "Liwayway", "Pit-os"];
+  const barangays = useBarangayNames();
   const messageTemplates = [
     {
       id: "advisory",
-      label: "Advisory — Monitor Water Levels",
+      label: "Yellow - Be Alert: Monitor water levels",
       message: "Water levels are rising in your area. Please monitor local conditions and stay updated on official announcements. No immediate action is required at this time.",
       level: "advisory" as AlertLevel,
     },
     {
       id: "warning",
-      label: "Warning — Prepare to Evacuate",
+      label: "Orange - Be Prepared: Prepare to evacuate",
       message: "Flood water levels have reached knee-to-waist height in low-lying areas. Prepare emergency supplies and be ready to evacuate to higher ground if conditions worsen.",
       level: "warning" as AlertLevel,
     },
     {
       id: "critical",
-      label: "Critical — Evacuate Now",
+      label: "Red - Take Action: Evacuate now",
       message: "IMMEDIATE DANGER. Flood water has reached critical levels. Evacuate to the nearest designated evacuation center now. Do not attempt to cross flooded roads or bridges.",
       level: "critical" as AlertLevel,
     },
@@ -415,38 +409,6 @@ export function MDRRMOAdminDashboard() {
       level: null,
     },
   ];
-
-  const getAlertLevelConfig = (level: AlertLevel) => {
-    switch (level) {
-      case "advisory":
-        return {
-          label: "ADVISORY",
-          color: "bg-blue-500",
-          bgColor: "bg-blue-50",
-          borderColor: "border-blue-500",
-          textColor: "text-blue-700",
-          description: "Information and awareness"
-        };
-      case "warning":
-        return {
-          label: "WARNING",
-          color: "bg-yellow-500",
-          bgColor: "bg-yellow-50",
-          borderColor: "border-yellow-500",
-          textColor: "text-yellow-700",
-          description: "Potential danger, prepare to act"
-        };
-      case "critical":
-        return {
-          label: "CRITICAL",
-          color: "bg-red-500",
-          bgColor: "bg-red-50",
-          borderColor: "border-red-500",
-          textColor: "text-red-700",
-          description: "Immediate danger, act now"
-        };
-    }
-  };
 
   const handleSendAlert = async () => {
     if (!newAlert.message.trim()) {
@@ -460,11 +422,9 @@ export function MDRRMOAdminDashboard() {
     }
     setTargetBarangayError("");
 
-    const alertConfig = getAlertLevelConfig(newAlert.level);
     const targets = allBarangays ? ["All Barangays"] : selectedBarangays;
-    const title = `${alertConfig.label} Alert`;
+    const title = `${pagasaText(newAlert.level)} Alert`;
 
-    const { data: { user } } = await supabase.auth.getUser();
     const insertResults = await Promise.allSettled(targets.map(async (targetBarangay) => {
       const { data: insertedAlert, error } = await supabase.from("alerts").insert({
         level: newAlert.level,
@@ -474,96 +434,66 @@ export function MDRRMOAdminDashboard() {
         channels: "push",
         sent_at: new Date().toISOString(),
         recipients: userCount,
-        created_by: user?.email ?? "MDRRMO Admin",
+        created_by: adminEmail,
         status: "approved",
-      }).select().single();
+        source: "mdrrmo",
+      }).select(ALERT_COLUMNS).single();
 
       if (error || !insertedAlert) {
         throw new Error(error?.message ?? "Unable to save alert.");
       }
-      return insertedAlert;
+      return toAlertRow(insertedAlert as Record<string, unknown>);
     }));
 
     const successfulAlerts = insertResults
-      .filter((result): result is PromiseFulfilledResult<Record<string, any>> => result.status === "fulfilled")
+      .filter((result): result is PromiseFulfilledResult<AlertRow> => result.status === "fulfilled")
       .map((result) => result.value);
     const failedBarangays = insertResults
       .map((result, index) => result.status === "rejected" ? targets[index] : null)
       .filter((target): target is string => target !== null);
 
+    successfulAlerts.forEach(upsertAlert);
+
     if (failedBarangays.length > 0) {
-      if (successfulAlerts.length > 0) {
-        setAlerts((current) => [
-          ...successfulAlerts.map((insertedAlert) => ({
-            id: insertedAlert.id,
-            level: insertedAlert.level as AlertLevel,
-            title: insertedAlert.title,
-            message: insertedAlert.message,
-            targetBarangay: insertedAlert.target_barangay,
-            channels: ["push"] as ["push"],
-            sentAt: insertedAlert.sent_at,
-            recipients: insertedAlert.recipients,
-            deliveryStatus: { push: 0 },
-            createdBy: insertedAlert.created_by,
-            status: insertedAlert.status,
-          })),
-          ...current,
-        ]);
-      }
       alert(`Alert creation failed for: ${failedBarangays.join(", ")}. Other alerts were saved successfully.`);
       return;
     }
 
-    const createdAlerts: Alert[] = successfulAlerts.map((insertedAlert) => ({
-      id: insertedAlert.id,
-      level: insertedAlert.level as AlertLevel,
-      title: insertedAlert.title,
-      message: insertedAlert.message,
-      targetBarangay: insertedAlert.target_barangay,
-      channels: ["push"],
-      sentAt: insertedAlert.sent_at,
-      recipients: insertedAlert.recipients,
-      deliveryStatus: { push: 0 },
-      createdBy: insertedAlert.created_by,
-      status: insertedAlert.status,
-    }));
-
-    setAlerts((current) => [...createdAlerts, ...current]);
-
-    // Add to audit log
-    const auditEntry: AuditLog = {
-      id: auditLogs.length + 1,
+    void writeAuditLog("ALERT_CREATED", adminEmail, `Created ${pagasaText(newAlert.level)} alert for ${targets.join(", ")} via push`);
+    setAuditLogs((current) => [{
+      id: Date.now(),
       action: "ALERT_CREATED",
-      user: "Admin: Current User",
+      user: adminEmail,
       timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      details: `Created ${alertConfig.label} alert for ${targets.join(", ")} via push`
-    };
-    setAuditLogs([auditEntry, ...auditLogs]);
+      details: `Created ${pagasaText(newAlert.level)} alert for ${targets.join(", ")} via push`,
+    }, ...current]);
 
     // Show success notification
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 5000);
 
     // Reset form
-    setNewAlert({
-      level: "warning",
-      message: "",
-      channels: {
-        push: true,
-      }
-    });
+    setNewAlert({ level: "warning", message: "" });
     setSelectedBarangays([]);
     setAllBarangays(true);
     setSelectedTemplate(null);
   };
 
-  const updateReportStatus = async (reportId: number, status: "approved" | "rejected") => {
-    const { error } = await supabase.from("community_reports").update({ status }).eq("id", reportId);
-    if (error) {
-      alert(`Unable to update report: ${error.message}`);
-      return;
-    }
-    setReports((current) => current.map((report) => report.id === reportId ? { ...report, status } : report));
+  /** Approve (approval_reason) or reject (rejection_reason); logged for the review-time analytics. */
+  const saveReportReview = async (report: Report, decision: "approved" | "rejected", reason: string) => {
+    const values =
+      decision === "approved"
+        ? { status: "approved", approval_reason: reason, rejection_reason: null }
+        : { status: "rejected", rejection_reason: reason, approval_reason: null };
+    const { data, error } = await supabase.from("community_reports").update(values).eq("id", report.id).select(REPORT_COLUMNS);
+    if (error) throw error;
+    if (!data?.length) throw new Error("The database did not save the change (no permission for this report).");
+    const saved = data[0] as unknown as Report;
+    setReports((current) => current.map((item) => (item.id === saved.id ? saved : item)));
+    const action = decision === "approved" ? "REPORT_APPROVED" : "REPORT_REJECTED";
+    const details = `Report #${report.id} ${decision}: ${reason}`;
+    void writeAuditLog(action, adminEmail, details);
+    setAuditLogs((current) => [{ id: Date.now(), action, user: adminEmail, timestamp: new Date().toISOString().slice(0, 19).replace("T", " "), details }, ...current]);
   };
 
   const handleDeleteReport = async (reportId: number) => {
@@ -579,10 +509,11 @@ export function MDRRMOAdminDashboard() {
     }
 
     setReports((current) => current.filter((report) => report.id !== reportId));
+    void writeAuditLog("REPORT_DELETED", adminEmail, `Deleted community report #${reportId}`);
     setAuditLogs((current) => [{
       id: Date.now(),
       action: "REPORT_DELETED",
-      user: "MDRRMO Admin",
+      user: adminEmail,
       timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
       details: `Deleted community report #${reportId}`,
     }, ...current]);
@@ -613,7 +544,7 @@ export function MDRRMOAdminDashboard() {
             </div>
 
             <p className="text-base text-slate-700">
-              You have <span className="font-semibold text-slate-900">{pendingReviewSummary.pendingReportsCount}</span> pending report(s) and <span className="font-semibold text-slate-900">{pendingReviewSummary.pendingAlertsCount}</span> pending alert(s) awaiting review.
+              You have <span className="font-semibold text-slate-900">{pendingReviewSummary.pendingReportsCount}</span> pending report(s) awaiting review.
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -626,17 +557,6 @@ export function MDRRMOAdminDashboard() {
                   className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
                 >
                   Review Reports
-                </button>
-              )}
-              {pendingReviewSummary.pendingAlertsCount > 0 && (
-                <button
-                  onClick={() => {
-                    setActiveTab("verify-alerts");
-                    setPendingReviewSummary(null);
-                  }}
-                  className="flex-1 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-600"
-                >
-                  Review Alerts
                 </button>
               )}
               <button
@@ -680,7 +600,7 @@ export function MDRRMOAdminDashboard() {
                 }}
                 className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
               >
-                Review
+                {toast.kind === "alert" ? "Open" : "Review"}
               </button>
               <button
                 onClick={() => dismissReviewToast(toast.id)}
@@ -692,6 +612,7 @@ export function MDRRMOAdminDashboard() {
           </div>
         ))}
       </div>
+
 
       {/* Header (sticky from 1024px so the Recent updates column can sit under it) */}
       <div ref={headerRef} className="bg-background px-6 pt-6 pb-2 lg:sticky lg:top-0 lg:z-30">
@@ -729,33 +650,29 @@ export function MDRRMOAdminDashboard() {
 
       <div className="max-w-7xl lg:max-w-[1660px] mx-auto px-6 py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">
       <div className="min-w-0">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Overview cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {stats.map((stat, index) => {
             const Icon = stat.icon;
+            const pastel = STAT_PASTELS[index % STAT_PASTELS.length];
             return (
               // Summary tile: clay. Icon on a decorative pastel chip.
-              <div
-                key={index}
-                className="clay p-5"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-3 rounded-full" style={{ background: `var(--${STAT_PASTELS[index % STAT_PASTELS.length]})` }}>
-                    <Icon size={24} style={{ color: `var(--${STAT_PASTELS[index % STAT_PASTELS.length]}-icon)` }} />
+              <div key={stat.label} className="clay p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="p-3 rounded-full" style={{ background: `var(--${pastel})` }}>
+                    <Icon size={24} style={{ color: `var(--${pastel}-icon)` }} aria-hidden="true" />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp size={16} className={stat.trend === 'up' ? 'text-green-600' : stat.trend === 'down' ? 'text-red-600' : 'text-gray-600'} />
-                    <span className={`text-sm font-medium ${stat.trend === 'up' ? 'text-green-600' : stat.trend === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
-                      {stat.change}
-                    </span>
-                  </div>
+                  <InfoTip label={stat.label}>{stat.info}</InfoTip>
                 </div>
                 <p className="text-2xl font-bold mb-1">{stat.value}</p>
-                <p className="text-sm text-gray-600">{stat.label}</p>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{stat.label}</p>
               </div>
             );
           })}
         </div>
+
+        {/* Barangay-published alerts: collapsed by default so reports stay the main focus. */}
+        <BarangayBroadcastBox alerts={alerts} now={now} adminEmail={adminEmail} onChanged={upsertAlert} onDeleted={dropAlert} />
 
         {/* Tabs */}
         <div id="mdrrmo-tabs" className="bg-white border border-border rounded-xl mb-6" style={{ scrollMarginTop: headerHeight + 16 }}>
@@ -763,12 +680,11 @@ export function MDRRMOAdminDashboard() {
             <div className="flex gap-2 overflow-x-auto" role="tablist">
               {[
                 { id: "overview", label: "Overview", icon: Activity },
-                { id: "verify-alerts", label: "Verify Barangay Alerts", icon: CheckCircle },
-                { id: "analytics", label: "Analytics & Metrics", icon: BarChart3 },
-                { id: "alerts", label: "Create System Alert", icon: Radio },
-                { id: "reports", label: "Verify Reports", icon: MapPin },
+                { id: "reports", label: "Verify Reports", icon: MapPin, badge: pendingReports.length },
                 { id: "quick-reports", label: "Quick Reports", icon: Waves, badge: quickReportsPending },
+                { id: "alerts", label: "Create System Alert", icon: Radio },
                 { id: "audit", label: "Audit Trail", icon: Clock },
+                { id: "flood-events", label: "Flood Events", icon: History },
               ].map((tab) => {
                 const TabIcon = tab.icon;
                 const badge = "badge" in tab ? tab.badge : null;
@@ -780,7 +696,7 @@ export function MDRRMOAdminDashboard() {
                     aria-selected={activeTab === tab.id}
                     className="clay-tab flex items-center gap-2"
                   >
-                    <TabIcon size={18} />
+                    <TabIcon size={18} aria-hidden="true" />
                     {tab.label}
                     {tab.id === "reports" && reportsHaveNewMessages && activeTab !== "reports" && <NewDot />}
                     {badge ? (
@@ -794,300 +710,84 @@ export function MDRRMOAdminDashboard() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {activeTab === "quick-reports" && <QuickReportsPanel />}
+            {activeTab === "flood-events" && <FloodEventsPanel />}
 
-            {/* Overview Tab */}
+            {/* Overview Tab: summary, then analytics, then the forecast */}
             {activeTab === "overview" && (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold mb-4">System Overview</h2>
+                <h2 className="text-xl font-bold">System Overview</h2>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("reports")}
+                    className="clay clay-press flex min-h-12 items-center gap-3 p-4 text-left"
+                  >
+                    <MapPin size={20} aria-hidden="true" style={{ color: "var(--primary-brand)" }} />
+                    <span className="flex-1">
+                      <span className="block text-sm font-bold">Verify community reports</span>
+                      <span className="block text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{pendingReports.length} pending</span>
+                    </span>
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("alerts")}
+                    className="clay clay-press flex min-h-12 items-center gap-3 p-4 text-left"
+                  >
+                    <Send size={20} aria-hidden="true" style={{ color: "var(--risk-low)" }} />
+                    <span className="flex-1">
+                      <span className="block text-sm font-bold">Create system alert</span>
+                      <span className="block text-xs font-normal" style={{ color: "var(--text-secondary)" }}>Send an alert to one or all barangays</span>
+                    </span>
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <MdrrmoAnalytics />
 
                 <RainfallForecastPanel />
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <Bell className="text-yellow-600 mt-0.5" size={20} />
-                    <div>
-                      <p className="text-sm text-yellow-800 mb-1">
-                        <strong>{alerts.filter((alert) => alert.status === "pending").length} Pending Barangay Alerts</strong> awaiting your verification
-                      </p>
-                      <button
-                        onClick={() => setActiveTab("verify-alerts")}
-                        className="text-sm text-yellow-700 hover:underline"
-                      >
-                        Review now →
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent activity now lives in the Recent updates column / bar. */}
-                <div className="grid grid-cols-1 gap-6">
-                  <div className="bg-white border border-gray-200 rounded-xl p-5">
-                    <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
-                    <div className="space-y-3">
-                      <button
-                        onClick={() => setActiveTab("verify-alerts")}
-                        className="w-full bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 text-yellow-800 py-3 px-4 rounded-lg text-left transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <CheckCircle size={20} />
-                          <div>
-                            <p className="text-sm font-medium">Verify Barangay Alerts</p>
-                            <p className="text-xs">{alerts.filter((alert) => alert.status === "pending").length} pending verifications</p>
-                          </div>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("reports")}
-                        className="w-full bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 py-3 px-4 rounded-lg text-left transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <MapPin size={20} />
-                          <div>
-                            <p className="text-sm font-medium">Verify Community Reports</p>
-                            <p className="text-xs">{reports.filter((report) => report.status === "pending").length} pending reports</p>
-                          </div>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("alerts")}
-                        className="w-full bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 py-3 px-4 rounded-lg text-left transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Send size={20} />
-                          <div>
-                            <p className="text-sm font-medium">Create System Alert</p>
-                            <p className="text-xs">Send alert to all barangays</p>
-                          </div>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
-            {/* Verify Barangay Alerts Tab */}
-            {activeTab === "verify-alerts" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold">Verify Barangay Alerts</h2>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <p className="text-sm text-blue-800">
-                    <strong>MDRRMO Responsibility:</strong> Review and verify alerts created by Barangay Officials before broadcasting to residents.
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {alerts.filter((alert) => alert.status === "pending").map((alert) => {
-                    const config = getAlertLevelConfig(alert.level);
-                    return (
-                      <div key={alert.id} id={`verify-alert-${alert.id}`} className="bg-white border-l-4 border-risk-medium p-5 shadow-sm">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className={`text-xs px-3 py-1 rounded-full ${config.bgColor} ${config.textColor} font-semibold`}>
-                                {config.label}
-                              </span>
-                              <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700">
-                                {alert.targetBarangay}
-                              </span>
-                            </div>
-                            <h3 className="text-lg font-semibold mb-2">{alert.title}</h3>
-                            <p className="text-sm text-gray-700 mb-3">{alert.message}</p>
-                            <div className="flex items-center gap-4 text-xs text-gray-500">
-                              <span>Created by: {alert.createdBy}</span>
-                              <span>•</span>
-                              <span>{new Date(alert.sentAt).toLocaleString()}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-3 pt-4 border-t border-gray-200">
-                          <button
-                            onClick={() => void supabase.from("alerts").update({ status: "approved" }).eq("id", alert.id).then(({ error }) => {
-                              if (error) window.alert(error.message);
-                              else setAlerts((current) => current.map((item) => item.id === alert.id ? { ...item, status: "approved" } : item));
-                            })}
-                            className="flex-1 bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-                          >
-                            <CheckCircle size={18} />
-                            Approve & Broadcast
-                          </button>
-                          <button
-                            onClick={() => void supabase.from("alerts").update({ status: "rejected" }).eq("id", alert.id).then(({ error }) => {
-                              if (error) window.alert(error.message);
-                              else setAlerts((current) => current.map((item) => item.id === alert.id ? { ...item, status: "rejected" } : item));
-                            })}
-                            className="flex-1 border-2 border-red-600 text-red-600 py-2.5 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
-                          >
-                            <XCircle size={18} />
-                            Reject
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Analytics Tab */}
-            {activeTab === "analytics" && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-xl font-bold mb-6">System Analytics & Performance Metrics</h2>
-
-                  {/* Report Trends */}
-                  <div className="bg-gray-50 rounded-xl p-6 mb-6">
-                    <h3 className="text-lg font-semibold mb-4">Report Submission Trends (Last 5 Days)</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={reportTrendsData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="reports" stroke="#3b82f6" strokeWidth={2} name="Total Reports" />
-                        <Line type="monotone" dataKey="verified" stroke="#22c55e" strokeWidth={2} name="Verified" />
-                        <Line type="monotone" dataKey="rejected" stroke="#ef4444" strokeWidth={2} name="Rejected" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Grid Layout */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Reports by Barangay */}
-                    <div className="bg-gray-50 rounded-xl p-6">
-                      <h3 className="text-lg font-semibold mb-4">Reports by Barangay</h3>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={barangayReportsData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip />
-                          <Bar dataKey="reports" fill="#3b82f6" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    {/* Alert Distribution */}
-                    <div className="bg-gray-50 rounded-xl p-6">
-                      <h3 className="text-lg font-semibold mb-4">Alert Level Distribution</h3>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={alertDistributionData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {alertDistributionData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* User Participation Growth */}
-                  <div className="bg-gray-50 rounded-xl p-6 mt-6">
-                    <h3 className="text-lg font-semibold mb-4">User Participation Growth</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={userParticipationData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis yAxisId="left" />
-                        <YAxis yAxisId="right" orientation="right" />
-                        <Tooltip />
-                        <Legend />
-                        <Line yAxisId="left" type="monotone" dataKey="activeUsers" stroke="#8b5cf6" strokeWidth={2} name="Active Users" />
-                        <Line yAxisId="right" type="monotone" dataKey="reports" stroke="#f97316" strokeWidth={2} name="Reports Submitted" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Key Metrics Summary */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Avg Response Time</p>
-                      <p className="text-2xl font-bold text-blue-600">8.5 min</p>
-                      <p className="text-xs text-gray-500 mt-1">Report verification time</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Communication Reach</p>
-                      <p className="text-2xl font-bold text-green-600">4,567</p>
-                      <p className="text-xs text-gray-500 mt-1">Total people reached today</p>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Report Accuracy</p>
-                      <p className="text-2xl font-bold text-purple-600">92%</p>
-                      <p className="text-xs text-gray-500 mt-1">Verified vs total reports</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Multi-Channel Alerts Tab */}
+            {/* Create System Alert Tab */}
             {activeTab === "alerts" && (
               <div className="space-y-6">
                 {/* Success Notification */}
                 {showNotification && (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
-                    <CheckCircle className="text-green-600 mt-0.5 flex-shrink-0" size={20} />
+                  <div role="status" className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
+                    <CheckCircle className="text-green-600 mt-0.5 flex-shrink-0" size={20} aria-hidden="true" />
                     <div>
                       <p className="text-sm font-semibold text-green-800">Alert Sent Successfully!</p>
                       <p className="text-xs text-green-700 mt-1">
-                        Your alert has been broadcast to all selected channels and recipients will receive notifications shortly.
+                        Your alert has been broadcast and recipients will receive notifications shortly.
                       </p>
                     </div>
                   </div>
                 )}
 
                 {/* Alert Creation Form */}
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <h2 className="text-lg font-bold mb-6">Create Standardized Alert</h2>
+                <div className="bg-gray-50 rounded-xl p-4 sm:p-6">
+                  <h2 className="text-lg font-bold mb-6">Create Alert</h2>
 
                   <div className="space-y-5">
-                    {/* Alert Level Selection */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Alert Level (ISO Standard) *
-                      </label>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {(["advisory", "warning", "critical"] as AlertLevel[]).map((level) => {
-                          const config = getAlertLevelConfig(level);
-                          return (
-                            <button
-                              key={level}
-                              type="button"
-                              onClick={() => setNewAlert({ ...newAlert, level })}
-                              className={`${config.bgColor} ${config.borderColor} border-2 rounded-xl p-4 text-left transition-all ${
-                                newAlert.level === level ? 'ring-2 ring-offset-2 ring-blue-500' : ''
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`${config.color} w-3 h-3 rounded-full mt-1 flex-shrink-0`}></div>
-                                <div className="flex-1">
-                                  <p className={`text-sm font-bold ${config.textColor} mb-1`}>{config.label}</p>
-                                  <p className="text-xs text-gray-600">{config.description}</p>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    {/* PAGASA level */}
+                    <label className="block">
+                      <span className="block text-sm font-semibold text-gray-700 mb-2">PAGASA alert level *</span>
+                      <select
+                        className="clay-input"
+                        value={newAlert.level}
+                        onChange={(e) => setNewAlert({ ...newAlert, level: e.target.value as AlertLevel })}
+                      >
+                        {PAGASA_LEVEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <span className="mt-2 inline-flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                        <span className={`risk-badge is-compact ${PAGASA[newAlert.level].badge}`}>{pagasaText(newAlert.level)}</span>
+                        Push preview: [{pagasaText(newAlert.level)}] {pagasaText(newAlert.level)} Alert
+                      </span>
+                    </label>
 
                     {/* Target Barangay */}
                     <div>
@@ -1124,42 +824,31 @@ export function MDRRMOAdminDashboard() {
                       {targetBarangayError && <p className="text-sm text-red-600 mt-2">{targetBarangayError}</p>}
                     </div>
 
-                    {/* Multi-Channel Selection */}
+                    {/* Channel */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Communication Channel
-                      </label>
-                      <div className="grid grid-cols-1 gap-3">
-                        <label className="flex items-center gap-3 bg-white border-2 border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked
-                            readOnly
-                            className="w-5 h-5"
-                          />
-                          <Smartphone size={20} className="text-blue-600" />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">Push Notification</p>
-                            <p className="text-xs text-gray-500">In-app alert</p>
-                          </div>
-                        </label>
+                      <p className="block text-sm font-semibold text-gray-700 mb-3">Communication Channel</p>
+                      <div className="flex items-center gap-3 bg-white border-2 border-gray-200 rounded-lg p-3">
+                        <Smartphone size={20} className="text-blue-600" aria-hidden="true" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">Push Notification</p>
+                          <p className="text-xs text-gray-500">In-app alert</p>
+                        </div>
                       </div>
                     </div>
 
                     {/* Message */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Quick Templates
-                      </label>
+                      <p className="block text-sm font-semibold text-gray-700 mb-3">Quick Templates</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
                         {messageTemplates.map((template) => (
                           <label key={template.id} className={`flex items-start gap-3 bg-white border-2 rounded-lg p-3 cursor-pointer transition-colors ${selectedTemplate === template.id ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}>
                             <input
-                              type="checkbox"
+                              type="radio"
+                              name="alert-template"
                               checked={selectedTemplate === template.id}
                               onChange={() => {
                                 setSelectedTemplate(template.id);
-                                setNewAlert({ ...newAlert, message: template.message });
+                                setNewAlert({ level: template.level ?? newAlert.level, message: template.message });
                               }}
                               className="w-5 h-5 mt-0.5"
                             />
@@ -1167,83 +856,52 @@ export function MDRRMOAdminDashboard() {
                           </label>
                         ))}
                       </div>
-                      {selectedTemplate && messageTemplates.find((template) => template.id === selectedTemplate)?.level && messageTemplates.find((template) => template.id === selectedTemplate)?.level !== newAlert.level && (
-                        <p className="text-xs text-amber-700 mb-2">This template is written for a different alert level. Consider updating Alert Level above.</p>
-                      )}
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Alert Message *
+                      <label className="block">
+                        <span className="block text-sm font-semibold text-gray-700 mb-2">Alert Message *</span>
+                        <textarea
+                          value={newAlert.message}
+                          onChange={(e) => setNewAlert({ ...newAlert, message: e.target.value })}
+                          placeholder="Enter detailed alert message for residents..."
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          rows={4}
+                        ></textarea>
                       </label>
-                      <textarea
-                        value={newAlert.message}
-                        onChange={(e) => setNewAlert({ ...newAlert, message: e.target.value })}
-                        placeholder="Enter detailed alert message for residents..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        rows={4}
-                      ></textarea>
                       <p className="text-xs text-gray-500 mt-1">
                         Clear and actionable instructions. Avoid jargon.
                       </p>
                     </div>
 
-                    {/* Send Button */}
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        onClick={handleSendAlert}
-                        className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
-                      >
-                        <Send size={20} />
-                        Broadcast Alert Now
-                      </button>
-                      <button className="px-6 border-2 border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors font-semibold">
-                        Schedule
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleSendAlert()}
+                      className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                    >
+                      <Send size={20} aria-hidden="true" />
+                      Broadcast Alert Now
+                    </button>
                   </div>
                 </div>
 
-                {/* Alert History with Channel Tracking */}
-                <div>
-                  <h3 className="text-lg font-bold mb-4">Alert History & Delivery Status</h3>
-                  <div className="space-y-3">
-                    {alerts.map((alert) => {
-                      const config = getAlertLevelConfig(alert.level);
-                      return (
-                        <div key={alert.id} id={`alert-history-${alert.id}`} className="bg-white border border-gray-200 rounded-xl p-5">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className={`${config.color} px-3 py-1 rounded-full text-xs font-bold text-white`}>
-                                  {config.label}
-                                </span>
-                                <span className="text-xs text-gray-500">• {alert.targetBarangay}</span>
-                              </div>
-                              <h4 className="text-sm font-semibold mb-1">{alert.title}</h4>
-                              <p className="text-sm text-gray-700 mb-2">{alert.message}</p>
-                              <div className="flex items-center gap-4 text-xs text-gray-500">
-                                <span>{alert.sentAt}</span>
-                                <span>•</span>
-                                <span>By: {alert.createdBy}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Delivery Status */}
-                          <div className="bg-gray-50 rounded-lg p-4 mt-4">
-                            <p className="text-xs font-semibold text-gray-700 mb-3">Delivery Status:</p>
-                            <div className="grid grid-cols-1 gap-3">
-                              <div className="flex items-center gap-2">
-                                <Smartphone size={16} className="text-blue-600" />
-                                <div>
-                                  <p className="text-xs text-gray-600">Push</p>
-                                  <p className="text-sm font-semibold">{alert.deliveryStatus.push}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                {/* Alert history: collapsed cards in a bounded list */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-lg font-bold">Alert history</h3>
+                    <Link to="/admin/mdrrmo/alerts" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold" style={{ color: "var(--primary-shade)" }}>
+                      View all <ChevronRight size={16} aria-hidden="true" />
+                    </Link>
                   </div>
+                  {alertDialogs}
+                  {alerts.length === 0 ? (
+                    <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No alerts yet.</p>
+                  ) : (
+                    <AlertScrollList label="Alert history">
+                      {alerts.slice(0, 100).map((alert) => (
+                        <li key={alert.id}>
+                          <CollapsibleAlertCard id={`alert-history-${alert.id}`} alert={alert} now={now} showStatus actions={alertActions(alert)} />
+                        </li>
+                      ))}
+                    </AlertScrollList>
+                  )}
                 </div>
               </div>
             )}
@@ -1294,70 +952,117 @@ export function MDRRMOAdminDashboard() {
 
             {activeTab === "reports" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <h2 className="text-lg font-bold">Community Reports Management</h2>
-                  <span className="text-sm text-gray-500">{reports.length} total reports</span>
+                  <span className="text-sm text-gray-500" aria-live="polite">
+                    {reportFiltered && `${reportMatching} matching ${reportMatching === 1 ? "report" : "reports"} · `}
+                    {reports.length} total reports
+                  </span>
                 </div>
-                {loadingData ? (
+                <ReportSearchControls
+                  searchInput={reportSearchInput}
+                  onSearchInput={setReportSearchInput}
+                  sort={reportSort}
+                  onSort={(s) => {
+                    setReportSort(s);
+                    setReportPage(1);
+                  }}
+                  status={reportStatus}
+                  onStatus={(s) => {
+                    setReportStatus(s);
+                    setReportPage(1);
+                  }}
+                  counts={reportList.counts}
+                />
+                {reportList.error ? (
+                  <p role="alert" className="bg-white px-3 py-2 text-sm" style={{ borderLeft: "4px solid var(--risk-high)", color: "var(--text-primary)" }}>Unable to load reports: {reportList.error}</p>
+                ) : reportList.loading && reportList.rows.length === 0 ? (
                   <p className="text-sm text-gray-500">Loading reports...</p>
-                ) : reports.length === 0 ? (
+                ) : reportList.rows.length === 0 && !reportFiltered ? (
                   <p className="text-sm text-gray-500">No community reports have been submitted.</p>
-                ) : reports.map((report) => {
-                  const statusLabel = report.status === "approved" || report.status === "verified" ? "verified" : report.status;
-                  const statusClasses = report.status === "pending"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : isApprovedReportStatus(report.status)
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700";
+                ) : reportList.rows.length === 0 ? (
+                  <div className="space-y-2 py-4 text-center">
+                    <p className="text-sm text-gray-500">No reports match your search</p>
+                    <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={clearReportSearch}>
+                      Clear search
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                  <ul className="space-y-3" aria-busy={reportList.loading}>
+                    {reportList.rows.map((report) => {
+                      const approved = report.status === "approved" || report.status === "verified";
+                      const statusBadge = report.status === "pending"
+                        ? { cls: "risk-badge-medium", label: "Pending" }
+                        : approved
+                          ? { cls: "risk-badge-low", label: "Approved" }
+                          : { cls: "risk-badge-high", label: "Rejected" };
+                      const hasNew = hasNewMessage(latestMessages[report.id], "mdrrmo", session?.user.id ? getThreadLastSeen(session.user.id, report.id) : 0);
 
-                  return (
-                    <div key={report.id} id={`report-${report.id}`} className="border border-gray-200 rounded-xl p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-semibold">{report.user_name}</p>
-                          <p className="text-sm text-gray-600">{report.location} {report.lat !== null && report.lng !== null ? `(${report.lat.toFixed(6)}, ${report.lng.toFixed(6)})` : ""}</p>
-                          <p className="text-sm mt-2">{report.description}</p>
-                          <p className="text-xs text-gray-500 mt-2">Water level: {report.water_level} | {new Date(report.timestamp).toLocaleString()}</p>
-                        </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${statusClasses}`}>
-                          {statusLabel}
-                        </span>
-                      </div>
-                      {report.photo_path && <img src={report.photo_path} alt="Community report" className="mt-3 w-full max-h-56 object-cover rounded-lg" />}
-
-                      {/* Thread with the resident and Barangay; the old single reply shows first. */}
-                      <ReportMessages
-                        reportId={report.id}
-                        viewerRole="mdrrmo"
-                        userId={session?.user.id ?? null}
-                        latest={latestMessages[report.id]}
-                        onLatest={updateLatestMessage}
-                        legacyReply={{ body: report.admin_reply, at: report.admin_reply_at }}
-                        canDelete
-                      />
-
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Admin actions</p>
-                        <div className="flex flex-wrap gap-3">
-                          {report.status === "pending" && (
-                            <>
-                              <button onClick={() => void updateReportStatus(report.id, "approved")} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm">Verify</button>
-                              <button onClick={() => void updateReportStatus(report.id, "rejected")} className="border border-red-600 text-red-600 px-4 py-2 rounded-lg text-sm">Reject</button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => void handleDeleteReport(report.id)}
-                            title="Delete report"
-                            className="inline-flex items-center gap-2 border border-red-600 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-50"
+                      return (
+                        <li key={report.id}>
+                          <DisclosureCard
+                            id={`report-${report.id}`}
+                            label={`Report at ${report.location || "unknown location"}, ${statusBadge.label}. Show details`}
+                            summary={
+                              <span className="block space-y-1">
+                                <span className="flex flex-wrap items-center gap-1.5">
+                                  <span className={`risk-badge is-compact ${statusBadge.cls}`}>{statusBadge.label}</span>
+                                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{report.barangay ?? "No barangay"}</span>
+                                  {hasNew && <NewDot />}
+                                </span>
+                                <span className="block truncate text-sm font-bold" style={{ color: "var(--text-primary)" }}>{report.location || "Unknown location"}</span>
+                                <span className="flex flex-wrap items-center gap-x-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                                  <span className="inline-flex items-center gap-1"><Droplets size={12} aria-hidden="true" /> {waterLevelLabel(report.water_level)}</span>
+                                  <span>{formatManilaDateTime(report.timestamp)}</span>
+                                </span>
+                              </span>
+                            }
                           >
-                            <Trash2 size={16} />
-                            Delete report
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                            <div className="space-y-3 border-t pt-3">
+                              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                By {displayReporterName(report.user_name)}
+                                {report.lat !== null && report.lng !== null ? ` · (${report.lat.toFixed(5)}, ${report.lng.toFixed(5)})` : ""}
+                              </p>
+                              {report.description && <p className="whitespace-pre-wrap break-words text-sm font-normal">{report.description}</p>}
+                              {report.photo_path && <ReportThumb src={report.photo_path} />}
+                              <ReviewReasons report={report} />
+
+                              <div className="flex flex-wrap gap-2">
+                                {!approved && (
+                                  <button type="button" onClick={() => setReviewingReport({ report, decision: "approved" })} className="clay-btn clay-btn-primary text-sm">
+                                    <CheckCircle size={16} aria-hidden="true" /> Approve
+                                  </button>
+                                )}
+                                {report.status !== "rejected" && (
+                                  <button type="button" onClick={() => setReviewingReport({ report, decision: "rejected" })} className="clay-btn clay-btn-secondary text-sm">
+                                    <XCircle size={16} aria-hidden="true" /> Reject
+                                  </button>
+                                )}
+                                <button type="button" onClick={() => void handleDeleteReport(report.id)} className="clay-btn clay-btn-secondary text-sm">
+                                  <Trash2 size={16} aria-hidden="true" /> Delete report
+                                </button>
+                              </div>
+
+                              {/* Thread with the resident and Barangay (any status); the old single reply shows first. */}
+                              <ReportMessages
+                                reportId={report.id}
+                                viewerRole="mdrrmo"
+                                userId={session?.user.id ?? null}
+                                latest={latestMessages[report.id]}
+                                onLatest={updateLatestMessage}
+                                legacyReply={{ body: report.admin_reply, at: report.admin_reply_at }}
+                                canDelete
+                              />
+                            </div>
+                          </DisclosureCard>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <ReportPager page={reportPage} pages={reportPages} loading={reportList.loading} onPage={setReportPage} />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1372,6 +1077,18 @@ export function MDRRMOAdminDashboard() {
         <RecentUpdatesColumn state={recentUpdates} loading={loadingData} onOpen={openUpdate} onViewAll={viewAllUpdates} />
       </aside>
       </div>
+
+      {reviewingReport && (
+        <ReportReviewDialog
+          report={reviewingReport.report}
+          decision={reviewingReport.decision}
+          onClose={() => setReviewingReport(null)}
+          onSave={async (reason) => {
+            await saveReportReview(reviewingReport.report, reviewingReport.decision, reason);
+            setReviewingReport(null);
+          }}
+        />
+      )}
     </div>
   );
 }

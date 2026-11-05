@@ -8,7 +8,7 @@ import { relativeTime } from "../../../lib/barangayAdmin";
  * realtime channels), so this adds no queries or channels. Capped at 30.
  */
 
-export type BarangayUpdateKind = "report" | "quick" | "approved" | "rejected" | "auto" | "level";
+export type BarangayUpdateKind = "report" | "quick" | "published" | "withdrawn" | "auto" | "level";
 
 export type BarangayUpdate = {
   key: string;
@@ -25,8 +25,8 @@ export const FEED_LIMIT = 30;
 const KIND_STYLE: Record<BarangayUpdateKind, { label: string; bg: string; fg: string }> = {
   report: { label: "Report", bg: "#DCEAF8", fg: "#1E4E8C" },
   quick: { label: "Quick Report", bg: "#D5F2EF", fg: "#0F6B63" },
-  approved: { label: "Approved", bg: "#DDF3E6", fg: "#1F6B3F" },
-  rejected: { label: "Rejected", bg: "#FBE3E0", fg: "#9B2C20" },
+  published: { label: "Published", bg: "#DDF3E6", fg: "#1F6B3F" },
+  withdrawn: { label: "Withdrawn", bg: "#FBE3E0", fg: "#9B2C20" },
   auto: { label: "Automated", bg: "#FDF1DC", fg: "#8A5A00" },
   level: { label: "Level", bg: "#E9E4FA", fg: "#4C3FA8" },
 };

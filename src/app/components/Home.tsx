@@ -11,10 +11,14 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { subscribeToTable } from "../../lib/realtime";
-import { AlertCard, ClayButton, ClayCard, RiskBadge, type AlertLevel } from "./clay/Clay";
+import { ClayButton, ClayCard, RiskBadge } from "./clay/Clay";
+import { CollapsibleAlertCard } from "./alerts/AlertDisclosure";
+import { RainfallInfoShort } from "./RainfallInfo";
+import { useResidentAlerts } from "../../lib/residentAlerts";
 import { asRiskLevel, riskSourceLabel } from "../../lib/floodRisk";
 import { useUnreadAlertCount } from "../../lib/alertsSeen";
 import { ProfileButton } from "./ProfileButton";
+import { BahaCountdownCard } from "./BahaCountdownCard";
 import {
   displayReporterName,
   reportBelongsToBarangay,
@@ -32,10 +36,13 @@ type RainOutlook = {
   forecast_12h: string | null;
   forecast_24h: string | null;
   auto_updated_at: string | null;
+  rain_next_3h: number | null;
+  peak_rain_mm_h: number | null;
+  peak_rain_at: string | null;
 };
 
 const BARANGAY_STATUS_COLUMNS =
-  "flood_risk, last_update, risk_source, rain_next_24h, forecast_6h, forecast_12h, forecast_24h, auto_updated_at";
+  "flood_risk, last_update, risk_source, rain_next_24h, forecast_6h, forecast_12h, forecast_24h, auto_updated_at, rain_next_3h, peak_rain_mm_h, peak_rain_at";
 
 const pickOutlook = (row: Partial<RainOutlook>): RainOutlook => ({
   risk_source: row.risk_source ?? null,
@@ -44,15 +51,10 @@ const pickOutlook = (row: Partial<RainOutlook>): RainOutlook => ({
   forecast_12h: row.forecast_12h ?? null,
   forecast_24h: row.forecast_24h ?? null,
   auto_updated_at: row.auto_updated_at ?? null,
+  rain_next_3h: row.rain_next_3h ?? null,
+  peak_rain_mm_h: row.peak_rain_mm_h ?? null,
+  peak_rain_at: row.peak_rain_at ?? null,
 });
-
-type LatestAlert = {
-  title: string;
-  message: string;
-  level: AlertLevel;
-  target_barangay: string;
-  sent_at: string;
-};
 
 export function Home() {
   const navigate = useNavigate();
@@ -61,30 +63,14 @@ export function Home() {
   const [floodRiskLastUpdate, setFloodRiskLastUpdate] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
-  const [latestAlert, setLatestAlert] = useState<LatestAlert | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [profileBarangay, setProfileBarangay] = useState<string | null>(null);
   const unreadAlerts = useUnreadAlertCount(userId, profileBarangay);
   const [outlook, setOutlook] = useState<RainOutlook | null>(null);
 
-  // Display only: newest approved critical/warning alert for the home card.
-  useEffect(() => {
-    let cancelled = false;
-    void supabase
-      .from("alerts")
-      .select("title, message, level, target_barangay, sent_at")
-      .eq("status", "approved")
-      .in("level", ["critical", "warning"])
-      .order("sent_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!cancelled && !error && data) setLatestAlert(data as LatestAlert);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Newest published Orange/Red alert for this barangay (withdrawn alerts drop off).
+  const { alerts: myAlerts } = useResidentAlerts(profileBarangay);
+  const latestAlert = myAlerts.find((a) => a.level !== "advisory") ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -207,7 +193,8 @@ export function Home() {
         )}
       </ClayCard>
 
-      {/* Rainfall outlook for the resident's own barangay */}
+      {/* Plain-language countdown to heavy rain, then the 6/12/24h outlook */}
+      {outlook && <BahaCountdownCard row={{ ...outlook, flood_risk: floodRisk }} />}
       {outlook && <RainfallOutlookCard outlook={outlook} />}
 
       {/* Primary actions */}
@@ -223,20 +210,18 @@ export function Home() {
       {/* Latest report from the resident's barangay */}
       <LatestReportCard barangay={profileBarangay} onOpen={() => navigate("/reports")} />
 
-      {/* Latest critical / warning alert (flat, never clay) */}
+      {/* Latest Orange / Red alert for this barangay (flat, never clay; collapsed by default) */}
       {latestAlert && (
-        <section>
+        <section className="mb-6">
           <h2 className="text-base font-bold mb-2.5" style={{ color: "var(--text-primary)" }}>
             Latest alert
           </h2>
-          <AlertCard
-            level={latestAlert.level}
-            title={latestAlert.title}
-            message={latestAlert.message}
-            meta={`${latestAlert.target_barangay} · ${formatRelative(latestAlert.sent_at)}`}
-          />
+          <CollapsibleAlertCard alert={latestAlert} />
         </section>
       )}
+
+      {/* Short "How rainfall risk works" with a link to the full page */}
+      <RainfallInfoShort />
     </div>
   );
 }

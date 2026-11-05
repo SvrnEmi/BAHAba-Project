@@ -1,14 +1,33 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router";
 import { Map, Marker, Overlay } from "pigeon-maps";
-import { WifiOff, Wifi, Layers, X, Droplets, AlertTriangle, Users, LocateFixed, Loader, Map as MapIcon, Clock } from "lucide-react";
+import { WifiOff, Wifi, Layers, X, AlertTriangle, LocateFixed, Loader, Map as MapIcon, Clock, History } from "lucide-react";
 import { nearestPlace, useLiveLocation, userLocationOverlays } from "./map/userLocation";
 import { ClayButton, ClayCard, RiskBadge, ScreenHeader, type RiskLevel } from "./clay/Clay";
 import { supabase } from "../../lib/supabase";
 import { subscribeToTable } from "../../lib/realtime";
 import { asRiskLevel, riskSourceLabel } from "../../lib/floodRisk";
+import { formatManilaDateTime } from "../../lib/barangayAdmin";
 
-type Zone = (typeof barangayData)[number] & { riskSource?: string | null };
-type LiveRisk = { flood_risk: string | null; risk_source: string | null };
+type RiskZone = {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  floodRisk: RiskLevel;
+  color: string;
+  riskSource: string | null;
+  lastUpdate: string | null;
+};
+type BarangayRow = {
+  id: number;
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  flood_risk: string | null;
+  risk_source: string | null;
+  last_update: string | null;
+};
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   high: "var(--risk-high)",
@@ -16,153 +35,37 @@ const RISK_COLORS: Record<RiskLevel, string> = {
   low: "var(--risk-low)",
 };
 
-// Real GIS coordinates for Odiongan barangays
-const barangayData = [
-  {
-    id: 1,
-    name: "Tuburan",
-    lat: 12.4018,
-    lng: 122.0234,
-    floodRisk: "high",
-    color: "var(--risk-high)",
-    waterLevel: "2.8 meters",
-    population: "1,234",
-    evacuated: "45 families",
-    lastUpdate: "10 mins ago",
-    gpsLat: "12.4018",
-    gpsLng: "122.0234",
-    description: "Critical flood zone near river confluence. Water level rising rapidly due to upstream rainfall."
-  },
-  {
-    id: 2,
-    name: "Gabawan",
-    lat: 12.3867,
-    lng: 122.0189,
-    floodRisk: "medium",
-    color: "var(--risk-medium)",
-    waterLevel: "1.5 meters",
-    population: "892",
-    evacuated: "12 families",
-    lastUpdate: "25 mins ago",
-    gpsLat: "12.3867",
-    gpsLng: "122.0189",
-    description: "Moderate flooding in low-lying areas. Creek overflow affecting residential zones."
-  },
-  {
-    id: 3,
-    name: "Ligaya",
-    lat: 12.4123,
-    lng: 122.0345,
-    floodRisk: "low",
-    color: "var(--risk-low)",
-    waterLevel: "0.8 meters",
-    population: "1,567",
-    evacuated: "0 families",
-    lastUpdate: "1 hour ago",
-    gpsLat: "12.4123",
-    gpsLng: "122.0345",
-    description: "Minimal flooding, mostly surface water. Drainage system functioning normally."
-  },
-  {
-    id: 4,
-    name: "Luntad",
-    lat: 12.3945,
-    lng: 122.0156,
-    floodRisk: "medium",
-    color: "var(--risk-medium)",
-    waterLevel: "1.7 meters",
-    population: "743",
-    evacuated: "8 families",
-    lastUpdate: "45 mins ago",
-    gpsLat: "12.3945",
-    gpsLng: "122.0156",
-    description: "Flash flood risk in agricultural areas. Roads partially submerged."
-  },
-  {
-    id: 5,
-    name: "Panique",
-    lat: 12.4256,
-    lng: 122.0412,
-    floodRisk: "low",
-    color: "var(--risk-low)",
-    waterLevel: "0.5 meters",
-    population: "2,103",
-    evacuated: "0 families",
-    lastUpdate: "1 hour 20 mins ago",
-    gpsLat: "12.4256",
-    gpsLng: "122.0412",
-    description: "Stable water levels. Well-maintained drainage infrastructure preventing flooding."
-  },
-  {
-    id: 6,
-    name: "Poblacion",
-    lat: 12.4089,
-    lng: 122.0267,
-    floodRisk: "medium",
-    color: "var(--risk-medium)",
-    waterLevel: "1.3 meters",
-    population: "3,456",
-    evacuated: "15 families",
-    lastUpdate: "30 mins ago",
-    gpsLat: "12.4089",
-    gpsLng: "122.0267",
-    description: "Urban flooding in downtown area. Blocked drainage causing water accumulation."
-  },
-  {
-    id: 7,
-    name: "Anahao",
-    lat: 12.3789,
-    lng: 122.0134,
-    floodRisk: "high",
-    color: "var(--risk-high)",
-    waterLevel: "2.5 meters",
-    population: "1,876",
-    evacuated: "38 families",
-    lastUpdate: "15 mins ago",
-    gpsLat: "12.3789",
-    gpsLng: "122.0134",
-    description: "Severe flooding near coastal area. Storm surge contributing to water level rise."
-  },
-  {
-    id: 8,
-    name: "Bangon",
-    lat: 12.4178,
-    lng: 122.0289,
-    floodRisk: "low",
-    color: "var(--risk-low)",
-    waterLevel: "0.6 meters",
-    population: "987",
-    evacuated: "0 families",
-    lastUpdate: "2 hours ago",
-    gpsLat: "12.4178",
-    gpsLng: "122.0289",
-    description: "Minor puddles on roads. Elevated terrain provides natural flood protection."
-  },
-  {
-    id: 9,
-    name: "Libertad",
-    lat: 12.3912,
-    lng: 122.0223,
-    floodRisk: "medium",
-    color: "var(--risk-medium)",
-    waterLevel: "1.9 meters",
-    population: "1,234",
-    evacuated: "10 families",
-    lastUpdate: "40 mins ago",
-    gpsLat: "12.3912",
-    gpsLng: "122.0223",
-    description: "Riverside flooding affecting low-lying residential areas. Monitoring river levels closely."
-  },
-];
+const ZONE_COLUMNS = "id, name, lat, lng, flood_risk, risk_source, last_update";
+/** Midpoint of the barangays; zoom 11.75 fits all of them (Panique to Progreso Weste) in the map. */
+const ODIONGAN_CENTER: [number, number] = [12.415, 121.99];
+
+function toZone(row: BarangayRow): RiskZone | null {
+  const lat = Number(row.lat);
+  const lng = Number(row.lng);
+  if (row.lat == null || row.lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const floodRisk = asRiskLevel(row.flood_risk) ?? "low";
+  return {
+    id: row.id,
+    name: row.name,
+    lat,
+    lng,
+    floodRisk,
+    color: RISK_COLORS[floodRisk],
+    riskSource: row.risk_source,
+    lastUpdate: row.last_update,
+  };
+}
 
 export function GISHazardMap() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [showLegend, setShowLegend] = useState(true);
-  const [selectedZone, setSelectedBarangay] = useState<Zone | null>(null);
-  // Live flood_risk / risk_source from Supabase, keyed by barangay name.
-  const [liveRisk, setLiveRisk] = useState<Record<string, LiveRisk>>({});
-  const [mapCenter, setMapCenter] = useState<[number, number]>([12.4018, 122.0234]);
-  const [zoom, setZoom] = useState(13);
+  const [selectedZone, setSelectedBarangay] = useState<RiskZone | null>(null);
+  // Barangays from Supabase (name, coordinates, live flood_risk), keyed by id.
+  const [rows, setRows] = useState<Record<number, BarangayRow>>({});
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [mapCenter, setMapCenter] = useState<[number, number]>(ODIONGAN_CENTER);
+  const [zoom, setZoom] = useState(11.75);
 
   // Live user location: starts on "Locate me", then follows watchPosition.
   // Recenters (zoom 15) on the first fix and on each button press only.
@@ -171,45 +74,51 @@ export function GISHazardMap() {
     setZoom(15);
   });
 
-  // Live risk levels: initial load plus realtime updates, so changes from the
-  // 30-minute job or the MDRRMO rainfall simulation show up immediately.
+  // Initial load plus realtime updates, so changes from the 30-minute job or
+  // the MDRRMO rainfall simulation show up immediately.
   useEffect(() => {
     let cancelled = false;
-    const apply = (rows: Array<LiveRisk & { name: string }>) =>
-      setLiveRisk((current) => {
+    const apply = (list: BarangayRow[]) =>
+      setRows((current) => {
         const next = { ...current };
-        for (const row of rows) next[row.name] = { flood_risk: row.flood_risk, risk_source: row.risk_source };
+        for (const row of list) next[row.id] = { ...next[row.id], ...row };
         return next;
       });
 
+    setLoadState("loading");
     void supabase
       .from("barangays")
-      .select("name, flood_risk, risk_source")
+      .select(ZONE_COLUMNS)
+      .order("name")
       .then(({ data, error }) => {
-        if (!cancelled && !error && data) apply(data as Array<LiveRisk & { name: string }>);
+        if (cancelled) return;
+        if (error || !data?.length) {
+          setLoadState("error");
+          return;
+        }
+        apply(data as BarangayRow[]);
+        setLoadState("ready");
       });
 
     const unsubscribe = subscribeToTable("barangays", (payload) => {
-      if (payload.eventType !== "UPDATE") return;
-      apply([payload.new as LiveRisk & { name: string }]);
+      if (payload.eventType === "DELETE") {
+        const id = (payload.old as Partial<BarangayRow>).id;
+        if (id != null) setRows(({ [id]: _removed, ...rest }) => rest);
+        return;
+      }
+      apply([payload.new as BarangayRow]);
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [reloadKey]);
 
-  const zones: Zone[] = barangayData.map((zone) => {
-    const live = liveRisk[zone.name];
-    const risk = asRiskLevel(live?.flood_risk);
-    if (!live) return zone;
-    return {
-      ...zone,
-      ...(risk ? { floodRisk: risk, color: RISK_COLORS[risk] } : {}),
-      riskSource: live.risk_source,
-    };
-  });
+  const zones = Object.values(rows)
+    .map(toZone)
+    .filter((z): z is RiskZone => z !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
   const selectedBarangay = selectedZone ? zones.find((z) => z.id === selectedZone.id) ?? selectedZone : null;
   const nearZone = nearestPlace(location.fix, zones);
 
@@ -253,6 +162,14 @@ export function GISHazardMap() {
               </>
             )}
           </button>
+      </div>
+
+      {/* Past floods from verified reports */}
+      <div className="px-[18px] mb-3">
+        <Link to="/map/history" className="clay-btn clay-btn-secondary w-full">
+          <History size={20} aria-hidden="true" />
+          Baha History
+        </Link>
       </div>
 
       {/* OpenStreetMap Container: map sits inside a clay frame */}
@@ -370,15 +287,25 @@ export function GISHazardMap() {
 
       {/* Barangay List */}
       <div className="px-[18px] py-6">
-        <h2 className="text-lg font-bold mb-4" style={{ color: "var(--text-primary)" }}>Barangay Flood Zones (9 locations)</h2>
+        <h2 className="text-lg font-bold mb-4" style={{ color: "var(--text-primary)" }}>
+          Barangay Flood Zones{zones.length > 0 && ` (${zones.length} barangays)`}
+        </h2>
+        {loadState === "loading" && zones.length === 0 && (
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading barangays...</p>
+        )}
+        {loadState === "error" && zones.length === 0 && (
+          <div role="alert" className="clay flex items-center justify-between gap-3 p-4 text-sm" style={{ color: "var(--text-primary)" }}>
+            <span>Unable to load the barangay flood zones. Check your connection.</span>
+            <ClayButton variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>Retry</ClayButton>
+          </div>
+        )}
         <div className="space-y-3">
           {zones.map((zone) => (
             <ClayCard key={zone.id} radius={20} className="p-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold mb-1.5" style={{ color: "var(--text-primary)" }}>{zone.name}</p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <RiskBadge risk={zone.floodRisk as RiskLevel} compact />
-                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{zone.waterLevel}</span>
+                  <RiskBadge risk={zone.floodRisk} compact />
                 </div>
                 {riskSourceLabel(zone.riskSource) && (
                   <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{riskSourceLabel(zone.riskSource)}</p>
@@ -433,60 +360,25 @@ export function GISHazardMap() {
                 </div>
               </div>
 
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <ClayCard radius={20} className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Droplets size={18} style={{ color: "var(--lavender-icon)" }} />
-                    <p className="text-xs text-gray-600">Water Level</p>
-                  </div>
-                  <p className="text-lg font-bold">{selectedBarangay.waterLevel}</p>
-                </ClayCard>
-
-                <ClayCard radius={20} className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users size={18} style={{ color: "var(--mint-icon)" }} />
-                    <p className="text-xs text-gray-600">Population</p>
-                  </div>
-                  <p className="text-lg font-bold">{selectedBarangay.population}</p>
-                </ClayCard>
-
-                <ClayCard radius={20} className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle size={18} style={{ color: "var(--peach-icon)" }} />
-                    <p className="text-xs text-gray-600">Evacuated</p>
-                  </div>
-                  <p className="text-lg font-bold">{selectedBarangay.evacuated}</p>
-                </ClayCard>
-
-                <ClayCard radius={20} className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock size={18} style={{ color: "var(--lavender-icon)" }} />
-                    <p className="text-xs text-gray-600">Last Update</p>
-                  </div>
-                  <p className="text-lg font-bold">{selectedBarangay.lastUpdate}</p>
-                </ClayCard>
-              </div>
+              <ClayCard radius={20} className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock size={18} style={{ color: "var(--lavender-icon)" }} />
+                  <p className="text-xs text-gray-600">Last Update</p>
+                </div>
+                <p className="text-lg font-bold">{formatManilaDateTime(selectedBarangay.lastUpdate)}</p>
+              </ClayCard>
 
               {/* GPS Coordinates */}
               <div>
                 <h3 className="text-sm mb-2">GPS Coordinates</h3>
                 <div className="rounded-2xl border bg-white p-4">
                   <p className="text-sm text-gray-700 font-mono">
-                    {selectedBarangay.gpsLat}, {selectedBarangay.gpsLng}
+                    {selectedBarangay.lat.toFixed(4)}, {selectedBarangay.lng.toFixed(4)}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Latitude, Longitude
+                    Latitude, Longitude (approximate barangay centre)
                   </p>
                 </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <h3 className="text-sm mb-2">Situation Report</h3>
-                <p className="text-sm text-gray-700 rounded-2xl border bg-white p-4">
-                  {selectedBarangay.description}
-                </p>
               </div>
 
               {/* Action Buttons */}

@@ -23,23 +23,6 @@ export function waterLevelInfo(level: string | null | undefined) {
   return WATER_LEVELS.find((w) => w.id === level) ?? null;
 }
 
-/**
- * Used when the barangays table cannot be read without signing in.
- * TODO: replace with the official list of the 25 Odiongan barangays (names
- * must match barangays.name exactly).
- */
-export const FALLBACK_BARANGAYS = [
-  "Anahao",
-  "Bangon",
-  "Gabawan",
-  "Libertad",
-  "Ligaya",
-  "Luntad",
-  "Panique",
-  "Poblacion",
-  "Tuburan",
-];
-
 const DEVICE_KEY = "bahaba_device_id";
 let memoryDeviceId: string | null = null;
 
@@ -87,20 +70,30 @@ const FRIENDLY: Record<string, string> = {
 };
 const GENERIC = "We couldn't send that right now. Please check your connection and try again, or call the MDRRMO.";
 
+type ErrorBody = { error?: unknown; message?: unknown; code?: unknown };
+
+/** The body of a failed call: JSON from the function or gateway, or short plain text (never an HTML page). */
+async function readErrorBody(response: Response): Promise<ErrorBody | null> {
+  const text = (await response.clone().text().catch(() => "")).trim();
+  if (!text || text.startsWith("<")) return null;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object") {
+      const body = parsed as ErrorBody;
+      return { ...body, error: body.error ?? body.message };
+    }
+    return null;
+  } catch {
+    return text.length <= 200 ? { error: text } : null;
+  }
+}
+
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("quick-report", { body });
-  let payload: { error?: unknown; code?: unknown } | null =
-    data && typeof data === "object" ? (data as { error?: unknown; code?: unknown }) : null;
+  let payload: ErrorBody | null = data && typeof data === "object" ? (data as ErrorBody) : null;
   if (error) {
-    payload = null;
     const context = (error as { context?: unknown }).context;
-    if (context instanceof Response) {
-      try {
-        payload = (await context.clone().json()) as { error?: unknown; code?: unknown };
-      } catch {
-        // Not JSON.
-      }
-    }
+    payload = context instanceof Response ? await readErrorBody(context) : null;
     if (!payload?.error) {
       console.error("quick-report request failed:", error.message);
       throw new QuickReportError(GENERIC);

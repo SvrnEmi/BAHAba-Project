@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
-import { ChevronRight, LogIn, Phone, UserPlus, Waves } from "lucide-react";
+import { ChevronRight, Download, LogIn, Phone, UserPlus, Waves } from "lucide-react";
+import { useLatestApkUrl } from "../../lib/appVersions";
 import { EMERGENCY_HOTLINE, MDRRMO_HOTLINE } from "../../lib/quickReport";
 import { BrandLogo } from "./BrandLogo";
 import { LegalFooter } from "./LegalFooter";
@@ -11,6 +12,7 @@ import { LegalFooter } from "./LegalFooter";
  */
 export function Welcome() {
   const navigate = useNavigate();
+  const apkUrl = useLatestApkUrl();
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-background px-6 pt-8 pb-3">
@@ -55,6 +57,12 @@ export function Welcome() {
             </span>
             <ChevronRight size={20} aria-hidden="true" />
           </button>
+          {apkUrl && (
+            <a href={apkUrl} target="_blank" rel="noopener noreferrer" className="clay-btn clay-btn-secondary w-full">
+              <Download size={20} aria-hidden="true" />
+              Download the Android app
+            </a>
+          )}
         </div>
 
         <section className="mt-6" aria-labelledby="welcome-emergency">

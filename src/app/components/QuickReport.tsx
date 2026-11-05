@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Camera, CheckCircle2, Loader, LocateFixed, Phone, Trash2 } from "lucide-react";
-import { supabase } from "../../lib/supabase";
+import { useBarangayNames } from "../../lib/barangays";
 import { BrandLogo } from "./BrandLogo";
 import {
   EMERGENCY_HOTLINE,
-  FALLBACK_BARANGAYS,
   MDRRMO_HOTLINE,
   QuickReportError,
   WATER_LEVELS,
@@ -57,7 +56,7 @@ function Notice({ tone, children }: { tone: "info" | "error" | "ok"; children: R
 type Phase =
   | { kind: "loading" }
   | { kind: "statusError"; message: string }
-  | { kind: "ready"; status: QuickReportStatus }
+  | { kind: "ready"; status: QuickReportStatus; blockedMessage?: string }
   | { kind: "sent"; remaining: number; photoFailed: boolean };
 
 type Location = { lat: number; lng: number; accuracy: number };
@@ -124,7 +123,7 @@ export function QuickReport() {
 
       {phase.kind === "ready" && phase.status.blocked && (
         <div className="space-y-4">
-          <Notice tone="error">This device can no longer send Quick Reports. Please call the MDRRMO or 911.</Notice>
+          <Notice tone="error">{phase.blockedMessage ?? "This device can no longer send Quick Reports. Please call the MDRRMO or 911."}</Notice>
           <HotlineButtons />
         </div>
       )}
@@ -133,7 +132,7 @@ export function QuickReport() {
         <ReportForm
           status={phase.status}
           onSent={(remaining, photoFailed) => setPhase({ kind: "sent", remaining, photoFailed })}
-          onBlocked={() => setPhase({ kind: "ready", status: { ...phase.status, blocked: true } })}
+          onBlocked={(blockedMessage) => setPhase({ kind: "ready", status: { ...phase.status, blocked: true }, blockedMessage })}
         />
       )}
 
@@ -181,12 +180,13 @@ function ReportForm({
 }: {
   status: QuickReportStatus;
   onSent: (remaining: number, photoFailed: boolean) => void;
-  onBlocked: () => void;
+  onBlocked: (message: string) => void;
 }) {
   const navigate = useNavigate();
   const used = status.remaining <= 0;
   const [level, setLevel] = useState<WaterLevel | null>(null);
-  const [barangays, setBarangays] = useState<string[]>(FALLBACK_BARANGAYS);
+  // Signed out, RLS hides the table, so this usually stays on the official list.
+  const barangays = useBarangayNames();
   const [barangay, setBarangay] = useState("");
   const [location, setLocation] = useState<Location | null>(null);
   const [locating, setLocating] = useState(false);
@@ -203,23 +203,6 @@ function ReportForm({
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Public read of barangay names; the fallback list stays if it is not allowed.
-  useEffect(() => {
-    let cancelled = false;
-    void supabase
-      .from("barangays")
-      .select("name")
-      .order("name")
-      .then(({ data, error: readError }) => {
-        if (cancelled || readError) return;
-        const names = ((data as { name: unknown }[] | null) ?? []).map((b) => String(b.name ?? "").trim()).filter(Boolean);
-        if (names.length) setBarangays(names);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => () => {
     if (photo) URL.revokeObjectURL(photo.url);
@@ -296,7 +279,7 @@ function ReportForm({
       onSent(Math.max(0, Number(result.remaining ?? 0)), photoFailed);
     } catch (err) {
       if (err instanceof QuickReportError && err.code === "blocked") {
-        onBlocked();
+        onBlocked(err.message);
         return;
       }
       setError(err instanceof QuickReportError ? err.message : "We couldn't send that right now. Please try again.");

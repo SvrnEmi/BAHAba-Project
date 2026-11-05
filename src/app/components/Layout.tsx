@@ -22,7 +22,7 @@ export function Layout() {
         <div className="clay flex items-center justify-around px-2.5 py-2" style={{ borderRadius: 28 }}>
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
             return (
               <Link
                 key={item.path}

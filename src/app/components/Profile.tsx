@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
+import { useBarangayNames } from "../../lib/barangays";
 import { ClayButton, ClayCard } from "./clay/Clay";
 import {
   DEFAULT_NOTIFICATION_PREFS,
@@ -50,6 +51,7 @@ type MyReport = {
   description: string | null;
   status: string | null;
   rejection_reason: string | null;
+  approval_reason: string | null;
   admin_reply: string | null;
   admin_reply_at: string | null;
   timestamp: string;
@@ -548,25 +550,10 @@ function MyBarangay({
   report: Report;
   onSaved: (barangay: string) => void;
 }) {
-  const [options, setOptions] = useState<string[]>([]);
+  // The table's list, or the official list when it cannot be read, so a
+  // profile with no barangay can always pick one.
+  const options = useBarangayNames();
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void supabase
-      .from("barangays")
-      .select("name")
-      .order("name")
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) report({ kind: "error", text: "Unable to load the barangay list." });
-        else setOptions(((data as { name: string }[]) ?? []).map((b) => b.name));
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const change = async (next: string) => {
     if (!next || next === barangay) return;
@@ -708,7 +695,7 @@ function MyReports({
     const names = [name, email].filter(Boolean);
     void supabase
       .from("community_reports")
-      .select("id, location, water_level, description, status, rejection_reason, admin_reply, admin_reply_at, timestamp")
+      .select("id, location, water_level, description, status, rejection_reason, approval_reason, admin_reply, admin_reply_at, timestamp")
       .in("user_name", names)
       .order("timestamp", { ascending: false })
       .then(({ data, error }) => {
@@ -758,8 +745,13 @@ function MyReports({
               </span>
             </div>
             {report.status === "rejected" && report.rejection_reason?.trim() && (
-              <p className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                Reason: {report.rejection_reason}
+              <p className="mt-2 px-2 py-1 text-xs" style={{ color: "var(--text-primary)", borderLeft: "3px solid var(--risk-high)" }}>
+                <span className="font-semibold">Why it was rejected:</span> {report.rejection_reason}
+              </p>
+            )}
+            {report.status === "approved" && report.approval_reason?.trim() && (
+              <p className="mt-2 px-2 py-1 text-xs" style={{ color: "var(--text-primary)", borderLeft: "3px solid var(--risk-low)" }}>
+                <span className="font-semibold">Why it was approved:</span> {report.approval_reason}
               </p>
             )}
             <ReportMessages

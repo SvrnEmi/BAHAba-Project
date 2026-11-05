@@ -8,6 +8,7 @@ import { AutomationSection } from "./AutomationSection";
 import { UsersSection } from "./UsersSection";
 import { AccountSection, NotificationsSection } from "./NotificationsAccountSections";
 import { SystemSection } from "./SystemSection";
+import { RainfallInfoLink } from "../RainfallInfo";
 
 type SectionId = "automation" | "users" | "notifications" | "account" | "system";
 
@@ -57,7 +58,10 @@ export function MDRRMOSettings() {
 
         <div className="space-y-4">
           {section("automation", CloudRain, "Automation and risk rules", "Thresholds", () => (
-            <AutomationSection adminEmail={adminEmail} />
+            <>
+              <RainfallInfoLink className="mb-2" />
+              <AutomationSection adminEmail={adminEmail} />
+            </>
           ))}
           {section("users", Users, "Users and roles", "Roles", () => (
             <UsersSection adminId={adminId} adminEmail={adminEmail} />

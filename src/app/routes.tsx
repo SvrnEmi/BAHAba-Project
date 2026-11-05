@@ -4,6 +4,7 @@ import { Login } from "./components/Login";
 import { Register } from "./components/Register";
 import { Home } from "./components/Home";
 import { GISHazardMap } from "./components/GISHazardMap";
+import { BahaHistory } from "./components/BahaHistory";
 import { Alerts } from "./components/Alerts";
 import { CommunityReports } from "./components/CommunityReports";
 import { MDRRMOAdminDashboard } from "./components/MDRRMOAdminDashboard";
@@ -15,6 +16,8 @@ import { MDRRMOSettings } from "./components/settings/MDRRMOSettings";
 import { BarangaySettings } from "./components/settings/BarangaySettings";
 import { ProtectedRoute, PublicOnlyRoute, RoleHomeRedirect, WelcomeRoute } from "./components/ProtectedRoute";
 import { Welcome } from "./components/Welcome";
+import { AllAlertsPage } from "./components/alerts/AllAlertsPage";
+import { RainfallInfoPage } from "./components/RainfallInfo";
 import { RESIDENT_ONLY, ROUTE_ROLES } from "../lib/auth";
 
 export const router = createBrowserRouter([
@@ -46,6 +49,11 @@ export const router = createBrowserRouter([
     element: <LegalPage doc="privacy" />,
   },
   {
+    // Public plain-language explanation of the automatic flood level.
+    path: "/rainfall-info",
+    element: <RainfallInfoPage />,
+  },
+  {
     // The old role picker; the role now comes from profiles, so go to the user's own dashboard.
     path: "/admin",
     element: <RoleHomeRedirect />,
@@ -64,6 +72,10 @@ export const router = createBrowserRouter([
     element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/mdrrmo/settings"]}><MDRRMOSettings /></ProtectedRoute>,
   },
   {
+    path: "/admin/mdrrmo/alerts",
+    element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/mdrrmo/alerts"]}><AllAlertsPage role="mdrrmo" /></ProtectedRoute>,
+  },
+  {
     path: "/admin/barangay",
     element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/barangay"]}><BarangayAdminDashboard /></ProtectedRoute>,
   },
@@ -72,12 +84,18 @@ export const router = createBrowserRouter([
     element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/barangay/settings"]}><BarangaySettings /></ProtectedRoute>,
   },
   {
+    path: "/admin/barangay/alerts",
+    element: <ProtectedRoute allowedRoles={ROUTE_ROLES["/admin/barangay/alerts"]}><AllAlertsPage role="barangay" /></ProtectedRoute>,
+  },
+  {
     // Resident pages (Home, Map, Alerts, Community Reports incl. the submit form).
     element: <ProtectedRoute allowedRoles={RESIDENT_ONLY}><Layout /></ProtectedRoute>,
     children: [
       { path: "/home", element: <Home /> },
       { path: "/map", element: <GISHazardMap /> },
+      { path: "/map/history", element: <BahaHistory /> },
       { path: "/alerts", element: <Alerts /> },
+      { path: "/alerts/all", element: <AllAlertsPage role="resident" /> },
       { path: "/reports", element: <CommunityReports /> },
     ],
   },

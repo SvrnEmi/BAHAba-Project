@@ -37,8 +37,6 @@ export type UpdateItem = {
   kind: UpdateKind;
   source: "report" | "alert";
   sourceId: number;
-  /** Status of the underlying alert/report now (used to pick where to jump). */
-  sourceStatus: string;
   title: string;
   detail: string;
   time: number;
@@ -125,33 +123,33 @@ export function useRecentUpdates(reports: FeedReport[], alerts: FeedAlert[], loa
       const place = r.location?.trim() || "Unknown location";
       const who = displayReporterName(r.user_name);
       list.push({
-        key: `report-${r.id}`, kind: "report", source: "report", sourceId: r.id, sourceStatus: r.status,
+        key: `report-${r.id}`, kind: "report", source: "report", sourceId: r.id,
         title: `Flood report: ${place}`, detail: `${waterLevelLabel(r.water_level)} · by ${who}`, time: time(r.timestamp),
       });
       if (r.admin_reply && r.admin_reply_at) {
         list.push({
-          key: `reply-${r.id}-${r.admin_reply_at}`, kind: "reply", source: "report", sourceId: r.id, sourceStatus: r.status,
+          key: `reply-${r.id}-${r.admin_reply_at}`, kind: "reply", source: "report", sourceId: r.id,
           title: `Reply sent: ${r.admin_reply}`, detail: `To ${who} · ${place}`, time: time(r.admin_reply_at),
         });
       }
       const reviewed = reviewedAt[`report-${r.id}-${r.status}`];
       if (reviewed) {
         list.push({
-          key: `review-report-${r.id}-${r.status}`, kind: isApproved(r.status) ? "approval" : "rejection", source: "report", sourceId: r.id, sourceStatus: r.status,
+          key: `review-report-${r.id}-${r.status}`, kind: isApproved(r.status) ? "approval" : "rejection", source: "report", sourceId: r.id,
           title: isApproved(r.status) ? "Report verified" : "Report rejected", detail: `${place} · by ${who}`, time: reviewed,
         });
       }
     }
     for (const a of alerts) {
       list.push({
-        key: `alert-${a.id}`, kind: "alert", source: "alert", sourceId: a.id, sourceStatus: a.status,
-        title: a.title || "Alert", detail: `${a.targetBarangay} · ${a.status === "pending" ? "awaiting review" : `by ${a.createdBy}`}`, time: time(a.sentAt),
+        key: `alert-${a.id}`, kind: "alert", source: "alert", sourceId: a.id,
+        title: a.title || "Alert", detail: `${a.targetBarangay} · by ${a.createdBy}`, time: time(a.sentAt),
       });
       const reviewed = reviewedAt[`alert-${a.id}-${a.status}`];
-      if (reviewed) {
+      if (reviewed && isApproved(a.status)) {
         list.push({
-          key: `review-alert-${a.id}-${a.status}`, kind: isApproved(a.status) ? "approval" : "rejection", source: "alert", sourceId: a.id, sourceStatus: a.status,
-          title: isApproved(a.status) ? "Alert approved" : "Alert rejected", detail: `${a.title || "Alert"} · ${a.targetBarangay}`, time: reviewed,
+          key: `review-alert-${a.id}-${a.status}`, kind: "alert", source: "alert", sourceId: a.id,
+          title: "Alert published", detail: `${a.title || "Alert"} · ${a.targetBarangay}`, time: reviewed,
         });
       }
     }

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Loader, MessageSquare, RefreshCw, Send, Trash2 } from "lucide-react";
+import { matchesQuery } from "../../lib/reportQuery";
+import { SearchSortBar } from "./ReportQueryBar";
 import {
   EMPTY_THREAD_TEXT,
   MESSAGE_COUNTER_FROM,
@@ -136,18 +138,28 @@ function Thread({
   const onLatestRef = useRef(onLatest);
   onLatestRef.current = onLatest;
 
+  const [query, setQuery] = useState("");
+  const [newestFirst, setNewestFirst] = useState(false);
+
   const legacy = legacyReply?.body?.trim() ? legacyReply : null;
   const last = messages[messages.length - 1] ?? null;
+  // Search and sort only change what is shown; "latest" above stays the real last message.
+  const legacyShown = legacy && matchesQuery(query, [legacy.body, SENDER_LABELS.mdrrmo]) ? legacy : null;
+  const found = messages.filter((m) => matchesQuery(query, [m.body, SENDER_LABELS[m.sender_role]]));
+  const shown = newestFirst ? [...found].reverse() : found;
+  const total = messages.length + (legacy ? 1 : 0);
+  const shownCount = found.length + (legacyShown ? 1 : 0);
 
   useEffect(() => {
     if (loading) return;
     onLatestRef.current(last ? { sender_role: last.sender_role, created_at: last.created_at } : null);
   }, [loading, last]);
 
+  // Keep the newest message in view: at the bottom (oldest first) or the top (newest first).
   useEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, loading]);
+    if (el) el.scrollTop = newestFirst ? 0 : el.scrollHeight;
+  }, [messages.length, loading, newestFirst]);
 
   const body = sendableBody(draft);
   const length = draft.trim().length;
@@ -197,17 +209,29 @@ function Thread({
       ) : !legacy && messages.length === 0 ? (
         <p className="clay-well rounded-2xl px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>{EMPTY_THREAD_TEXT}</p>
       ) : (
-        <ol ref={listRef} className="clay-well max-h-80 space-y-3 overflow-y-auto rounded-2xl p-3" aria-label="Message thread">
-          {legacy && (
-            <Bubble
-              own={viewerRole === "mdrrmo"}
-              role="mdrrmo"
-              body={legacy.body ?? ""}
-              when={legacy.at}
-              note="Earlier reply"
+        <>
+          {total > 1 && (
+            <SearchSortBar
+              query={query}
+              onQuery={setQuery}
+              sort={newestFirst ? "newest" : "oldest"}
+              onSort={(s) => setNewestFirst(s === "newest")}
+              options={[
+                { value: "oldest", label: "Oldest first" },
+                { value: "newest", label: "Newest first" },
+              ]}
+              searchLabel="Search messages"
+              placeholder="Search messages"
+              sortLabel="Sort messages"
+              countText={query ? `${shownCount} of ${total} messages match` : undefined}
             />
           )}
-          {messages.map((m) => (
+          {shownCount === 0 ? (
+            <p className="clay-well rounded-2xl px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>No messages match "{query.trim()}".</p>
+          ) : (
+        <ol ref={listRef} className="clay-well max-h-80 space-y-3 overflow-y-auto rounded-2xl p-3" aria-label="Message thread">
+          {legacyShown && !newestFirst && <LegacyBubble legacy={legacyShown} viewerRole={viewerRole} />}
+          {shown.map((m) => (
             <Bubble
               key={m.id}
               own={m.sender_role === viewerRole}
@@ -230,17 +254,21 @@ function Thread({
               }
             />
           ))}
+          {/* The earlier reply is the oldest message, so it goes last when newest first. */}
+          {legacyShown && newestFirst && <LegacyBubble legacy={legacyShown} viewerRole={viewerRole} />}
         </ol>
+          )}
+        </>
       )}
 
       <div>
-        <label className="sr-only" htmlFor={`report-${reportId}-message-input`}>Write a message</label>
+        <label className={viewerRole === "resident" ? "clay-label" : "sr-only"} htmlFor={`report-${reportId}-message-input`}>{viewerRole === "resident" ? "Reply to the barangay or MDRRMO" : "Write a message"}</label>
         <textarea
           id={`report-${reportId}-message-input`}
           className="clay-input text-sm"
           rows={2}
           maxLength={MESSAGE_MAX_LENGTH}
-          placeholder="Write a message"
+          placeholder={viewerRole === "resident" ? "Reply to the barangay or MDRRMO" : "Write a message"}
           value={draft}
           disabled={sending}
           aria-describedby={sendError ? `report-${reportId}-message-error` : undefined}
@@ -272,6 +300,10 @@ function Thread({
       </div>
     </div>
   );
+}
+
+function LegacyBubble({ legacy, viewerRole }: { legacy: LegacyReply; viewerRole: SenderRole }) {
+  return <Bubble own={viewerRole === "mdrrmo"} role="mdrrmo" body={legacy.body ?? ""} when={legacy.at} note="Earlier reply" />;
 }
 
 function Bubble({

@@ -5,6 +5,8 @@ import { supabase } from "../../../lib/supabase";
 import { asRiskLevel, type RiskLevel } from "../../../lib/floodRisk";
 import { errorMessage, formatManilaHour, formatManilaTime, formatManilaWhen, relativeTime, toTime } from "../../../lib/barangayAdmin";
 import { RiskBadge } from "../clay/Clay";
+import { RainfallInfoLink } from "../RainfallInfo";
+import { InfoTip, RAIN_TILE_INFO } from "../InfoTip";
 
 /*
  * "My barangay" status + 24-hour forecast for the barangay admin, and the
@@ -149,6 +151,7 @@ export function BarangayStatusPanel({ barangayName, row, hours, overrideHours, l
           <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
             {loading ? "Loading..." : updated ? `Updated ${updated} (Open-Meteo)` : "Forecast not updated yet (Open-Meteo)"}
           </p>
+          <RainfallInfoLink />
         </div>
         {simulated && !loading && (
           <span className="risk-badge risk-badge-medium is-compact" role="status">
@@ -235,7 +238,10 @@ function TrendTag({ trend }: { trend: Trend }) {
 function Tile({ label, value, unit, note }: { label: string; value: string; unit: string; note?: string }) {
   return (
     <div className="rounded-xl border bg-white p-3" style={{ borderColor: "var(--border)" }}>
-      <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</p>
+      <div className="flex items-start justify-between gap-1">
+        <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</p>
+        {RAIN_TILE_INFO[label] && <span className="-mr-2 -mt-2"><InfoTip label={label}>{RAIN_TILE_INFO[label]}</InfoTip></span>}
+      </div>
       <p className="mt-1 text-xl font-bold" style={{ color: "var(--text-primary)" }}>
         {value}
         {value !== "--" && <span className="ml-1 text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{unit}</span>}

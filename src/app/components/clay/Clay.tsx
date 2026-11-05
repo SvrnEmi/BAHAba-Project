@@ -130,13 +130,14 @@ export function RiskBadge({ risk, compact = false }: { risk: RiskLevel | null | 
 
 export type AlertLevel = "advisory" | "warning" | "critical";
 
+// PAGASA color + label for each stored level (see src/lib/alerts.ts).
 const alertStyle: Record<AlertLevel, { color: string; badge: string; label: string }> = {
-  advisory: { color: "var(--primary-shade)", badge: "risk-badge-info", label: "Advisory" },
-  warning: { color: "var(--risk-medium)", badge: "risk-badge-medium", label: "Warning" },
-  critical: { color: "var(--risk-high)", badge: "risk-badge-high", label: "Critical" },
+  advisory: { color: "var(--pagasa-yellow)", badge: "pagasa-badge-yellow", label: "Yellow - Be Alert" },
+  warning: { color: "var(--pagasa-orange)", badge: "pagasa-badge-orange", label: "Orange - Be Prepared" },
+  critical: { color: "var(--pagasa-red)", badge: "pagasa-badge-red", label: "Red - Take Action" },
 };
 
-/** Solid alert-level badge, never clay. */
+/** Solid PAGASA alert badge (color + text label), never clay. */
 export function AlertLevelBadge({ level, compact = true }: { level: AlertLevel; compact?: boolean }) {
   const s = alertStyle[level] ?? alertStyle.advisory;
   const Icon = level === "advisory" ? Info : AlertTriangle;

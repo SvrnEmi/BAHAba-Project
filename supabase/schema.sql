@@ -286,16 +286,32 @@ using (
   and auth.role() = 'authenticated'
 );
 
--- Sample barangays for Odiongan
+-- The 25 official barangays of Odiongan (PSA); approximate centre points
 insert into public.barangays (name, flood_risk, last_update, lat, lng)
 values
-  ('Tuburan', 'high', now(), 12.4018, 122.0234),
-  ('Poctoy', 'medium', now(), 12.3890, 122.0110),
-  ('Gabawan', 'low', now(), 12.3800, 122.0300),
-  ('Batiano', 'medium', now(), 12.4200, 122.0400),
-  ('Panique', 'low', now(), 12.4100, 122.0050),
-  ('Libertad', 'high', now(), 12.4300, 122.0150),
-  ('Canjalon', 'medium', now(), 12.3950, 122.0350),
-  ('Liwayway', 'low', now(), 12.4050, 122.0450),
-  ('Pit-os', 'medium', now(), 12.3850, 122.0220)
+  ('Amatong', 'low', now(), 12.3929, 122.0103),
+  ('Anahao', 'low', now(), 12.3697, 121.9626),
+  ('Bangon', 'low', now(), 12.3835, 121.9801),
+  ('Batiano', 'low', now(), 12.4198, 121.9892),
+  ('Budiong', 'low', now(), 12.4027, 121.9740),
+  ('Canduyong', 'low', now(), 12.3977, 121.9544),
+  ('Dapawan', 'low', now(), 12.4027, 121.9900),
+  ('Gabawan', 'low', now(), 12.4262, 122.0001),
+  ('Libertad', 'low', now(), 12.4539, 122.0060),
+  ('Ligaya', 'low', now(), 12.4049, 121.9811),
+  ('Liwanag', 'low', now(), 12.3957, 121.9822),
+  ('Liwayway', 'low', now(), 12.4001, 121.9818),
+  ('Malilico', 'low', now(), 12.3472, 121.9736),
+  ('Mayha', 'low', now(), 12.3740, 121.9931),
+  ('Panique', 'low', now(), 12.4784, 122.0118),
+  ('Pato-o', 'low', now(), 12.4097, 122.0242),
+  ('Poctoy', 'low', now(), 12.4084, 121.9929),
+  ('Progreso Este', 'low', now(), 12.3539, 122.0143),
+  ('Progreso Weste', 'low', now(), 12.3411, 121.9984),
+  ('Rizal', 'low', now(), 12.3656, 122.0095),
+  ('Tabing Dagat', 'low', now(), 12.4030, 121.9805),
+  ('Tabobo-an', 'low', now(), 12.3738, 121.9871),
+  ('Tuburan', 'low', now(), 12.4528, 122.0226),
+  ('Tulay', 'low', now(), 12.3899, 121.9844),
+  ('Tumingad', 'low', now(), 12.4410, 122.0065)
 on conflict (name) do nothing;

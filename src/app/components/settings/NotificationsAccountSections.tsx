@@ -30,7 +30,7 @@ export function NotificationsSection() {
         />
         <SwitchRow
           label="Popup for new barangay alerts"
-          hint="When a barangay admin submits an alert for approval."
+          hint="When a barangay admin publishes an alert to their residents."
           checked={prefs.barangayAlerts}
           onChange={(v) => set("barangayAlerts", v)}
         />

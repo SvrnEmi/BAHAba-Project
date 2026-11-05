@@ -9,10 +9,10 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 type Account = "resident" | "barangay" | "otherBarangay" | "mdrrmo";
 const accounts: Record<Account, { id: string; email: string; role: "resident" | "barangay" | "mdrrmo"; barangay: string }> = {
-  resident: { id: "00000000-0000-4000-8000-000000000011", email: "resident@test.local", role: "resident", barangay: "Poblacion" },
-  barangay: { id: "00000000-0000-4000-8000-000000000012", email: "barangay@test.local", role: "barangay", barangay: "Poblacion" },
+  resident: { id: "00000000-0000-4000-8000-000000000011", email: "resident@test.local", role: "resident", barangay: "Poctoy" },
+  barangay: { id: "00000000-0000-4000-8000-000000000012", email: "barangay@test.local", role: "barangay", barangay: "Poctoy" },
   otherBarangay: { id: "00000000-0000-4000-8000-000000000013", email: "other@test.local", role: "barangay", barangay: "Tabing Dagat" },
-  mdrrmo: { id: "00000000-0000-4000-8000-000000000014", email: "mdrrmo@test.local", role: "mdrrmo", barangay: "Poblacion" },
+  mdrrmo: { id: "00000000-0000-4000-8000-000000000014", email: "mdrrmo@test.local", role: "mdrrmo", barangay: "Poctoy" },
 };
 test.describe.configure({ timeout: 90_000 });
 
@@ -31,7 +31,7 @@ const BASE_REPORT = {
   rejection_reason: null,
   admin_reply: null,
   admin_reply_at: null,
-  barangay: "Poblacion",
+  barangay: "Poctoy",
 };
 
 type Row = { id: number; report_id: number; sender_id: string; sender_role: string; body: string; created_at: string };

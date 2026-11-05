@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { parseRole, useAuth } from "../../lib/auth";
+import { logAuthError, resetErrorMessage, RESET_LINK_SENT_MESSAGE } from "../../lib/authErrors";
 import { BrandLogo } from "./BrandLogo";
 import { LegalFooter } from "./LegalFooter";
 import { BackToWelcome } from "./BackToWelcome";
@@ -10,9 +11,10 @@ import { BackToWelcome } from "./BackToWelcome";
 const getFriendlyAuthError = (error: unknown) => {
   const rawMessage = error instanceof Error ? error.message : String(error ?? "");
   const normalized = rawMessage.toLowerCase();
+  const code = (error as { code?: string } | null)?.code;
 
-  if (normalized.includes("invalid login credentials") || normalized.includes("user not found")) {
-    return "Incorrect email or password. Please try again.";
+  if (code === "invalid_credentials" || normalized.includes("invalid login credentials") || normalized.includes("user not found")) {
+    return "Wrong email or password.";
   }
 
   if (normalized.includes("email not confirmed") || normalized.includes("confirm your email") || normalized.includes("not confirmed")) {
@@ -40,14 +42,39 @@ const getFriendlyAuthError = (error: unknown) => {
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut, authNotice, clearAuthNotice } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  // Register's "Log in" button passes the email along.
+  const [email, setEmail] = useState((location.state as { email?: string } | null)?.email ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError("Please enter your email address first.");
+      return;
+    }
+
+    setError(null);
+    setResendMessage(null);
+    setIsSendingReset(true);
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (resetError) throw resetError;
+      setResendMessage(RESET_LINK_SENT_MESSAGE);
+    } catch (err) {
+      logAuthError("Password reset", err);
+      setError(resetErrorMessage(err));
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
 
   const handleResendConfirmation = async () => {
     if (!email.trim()) {
@@ -123,6 +150,7 @@ export function Login() {
       // Signed in with a valid role: PublicOnlyRoute redirects to the remembered
       // page (if this role may open it) or the role's own home.
     } catch (err) {
+      logAuthError("Login", err);
       setError(getFriendlyAuthError(err));
     } finally {
       setIsSubmitting(false);
@@ -199,8 +227,14 @@ export function Login() {
               <input type="checkbox" className="mr-2 rounded" />
               Remember me
             </label>
-            <button type="button" className="min-h-12 px-2 font-semibold hover:underline" style={{ color: "var(--primary-shade)" }}>
-              Forgot password?
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={isSendingReset}
+              className="min-h-12 px-2 font-semibold hover:underline"
+              style={{ color: "var(--primary-shade)" }}
+            >
+              {isSendingReset ? "Sending..." : "Forgot password?"}
             </button>
           </div>
 

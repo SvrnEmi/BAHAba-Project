@@ -1,78 +1,63 @@
 import { useState } from "react";
-import { CheckCircle, Clock, Loader, Send, XCircle } from "lucide-react";
+import { Link } from "react-router";
+import { ChevronRight, Loader, Send, Undo2 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import { ALERT_TEMPLATES, errorMessage, fillTemplate, formatManilaDateTime, type AlertLevel } from "../../../lib/barangayAdmin";
-import { AlertLevelBadge } from "../clay/Clay";
+import { ALERT_TEMPLATES, errorMessage, fillTemplate } from "../../../lib/barangayAdmin";
+import {
+  ALERT_COLUMNS,
+  ALERT_REJECT_REASONS,
+  PAGASA_LEVEL_OPTIONS,
+  isLimitError,
+  pagasaText,
+  toAlertRow,
+  withdrawAlert,
+  type AlertLevel,
+  type AlertRow,
+} from "../../../lib/alerts";
+import { AlertScrollList, CollapsibleAlertCard } from "../alerts/AlertDisclosure";
+import { ReasonDialog } from "../ReasonDialog";
 
 /*
- * Alert drafts for the admin's own barangay. Inserts are always pending;
- * MDRRMO approves or rejects them.
+ * Alerts for the admin's own barangay. Publishing is immediate: the server
+ * sets target_barangay, source, status and created_by, so the insert only
+ * sends level, title, message and channels. The server limits each
+ * barangay to 5 alerts per hour (error text starts with "Limit reached").
+ * A published alert can be withdrawn with a reason (min 3 characters).
  */
 
-export type BarangayAlertRow = {
-  id: number;
-  level: AlertLevel;
-  title: string;
-  message: string;
-  target_barangay: string;
-  created_by: string | null;
-  status: string;
-  rejection_reason: string | null;
-  source: string | null;
-  sent_at: string | null;
-};
+export type BarangayAlertRow = AlertRow;
+export { ALERT_COLUMNS };
+export const toAlert = toAlertRow;
 
-export const ALERT_COLUMNS = "id, level, title, message, target_barangay, created_by, status, rejection_reason, source, sent_at";
-
-export const toAlert = (row: Record<string, unknown>): BarangayAlertRow => ({
-  id: Number(row.id),
-  level: row.level === "warning" || row.level === "critical" ? row.level : "advisory",
-  title: String(row.title ?? ""),
-  message: String(row.message ?? ""),
-  target_barangay: String(row.target_barangay ?? ""),
-  created_by: typeof row.created_by === "string" ? row.created_by : null,
-  status: String(row.status ?? "pending"),
-  rejection_reason: typeof row.rejection_reason === "string" ? row.rejection_reason : null,
-  source: typeof row.source === "string" ? row.source : null,
-  sent_at: typeof row.sent_at === "string" ? row.sent_at : null,
-});
-
-const LEVELS: Array<{ id: AlertLevel; label: string }> = [
-  { id: "advisory", label: "Advisory - information" },
-  { id: "warning", label: "Warning - prepare to act" },
-  { id: "critical", label: "Critical - act now" },
-];
-
-function DraftStatus({ status }: { status: string }) {
-  if (status === "approved") return <span className="risk-badge risk-badge-low is-compact"><CheckCircle size={12} aria-hidden="true" /> Approved</span>;
-  if (status === "rejected") return <span className="risk-badge risk-badge-high is-compact"><XCircle size={12} aria-hidden="true" /> Rejected</span>;
-  return <span className="risk-badge risk-badge-medium is-compact"><Clock size={12} aria-hidden="true" /> Pending</span>;
-}
+type Draft = { level: AlertLevel; title: string; message: string };
 
 export function BarangayAlertsSection({
   barangay,
-  createdBy,
-  drafts,
-  autoAlerts,
+  published,
+  otherAlerts,
   loading,
   error,
-  onCreated,
+  now,
+  onChanged,
 }: {
   barangay: string;
-  createdBy: string;
-  drafts: BarangayAlertRow[];
-  /** Automated warnings (source auto) for the barangay, read-only. */
-  autoAlerts: BarangayAlertRow[];
+  /** Alerts published by this barangay (source barangay). */
+  published: AlertRow[];
+  /** MDRRMO and automatic alerts for the barangay, read-only. */
+  otherAlerts: AlertRow[];
   loading: boolean;
   error: string | null;
-  onCreated: (alert: BarangayAlertRow) => void;
+  now: number;
+  onChanged: (alert: AlertRow) => void;
 }) {
   const [level, setLevel] = useState<AlertLevel>("advisory");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [template, setTemplate] = useState("");
+  const [confirming, setConfirming] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [withdrawing, setWithdrawing] = useState<AlertRow | null>(null);
 
   const applyTemplate = (id: string) => {
     setTemplate(id);
@@ -83,31 +68,39 @@ export function BarangayAlertsSection({
     setResult(null);
   };
 
-  const submit = async () => {
-    if (saving) return;
+  const review = () => {
     if (!title.trim() || !message.trim()) {
       setResult({ kind: "error", text: "Please enter a title and a message." });
       return;
     }
+    setResult(null);
+    setConfirming({ level, title: title.trim(), message: message.trim() });
+  };
+
+  const publish = async () => {
+    if (!confirming || saving) return;
     setSaving(true);
     setResult(null);
     try {
       const { data, error: insertError } = await supabase
         .from("alerts")
-        .insert({ level, title: title.trim(), message: message.trim(), target_barangay: barangay, created_by: createdBy, status: "pending" })
+        .insert({ level: confirming.level, title: confirming.title, message: confirming.message, channels: "push" })
         .select(ALERT_COLUMNS)
         .single();
       if (insertError) throw insertError;
-      if (data) onCreated(toAlert(data as Record<string, unknown>));
+      if (data) onChanged(toAlertRow(data as Record<string, unknown>));
       setTitle("");
       setMessage("");
       setTemplate("");
       setLevel("advisory");
-      setResult({ kind: "ok", text: "Sent to MDRRMO for approval." });
+      setResult({ kind: "ok", text: `Published. Residents of ${barangay} are being notified.` });
     } catch (err) {
-      setResult({ kind: "error", text: errorMessage(err, "Unable to send the alert.") });
+      const text = errorMessage(err, "Unable to publish the alert.");
+      // The 5-per-hour limit message is shown exactly as the server words it.
+      setResult({ kind: "error", text: isLimitError(text) ? text : `Unable to publish: ${text}` });
     } finally {
       setSaving(false);
+      setConfirming(null);
     }
   };
 
@@ -117,13 +110,15 @@ export function BarangayAlertsSection({
         className="clay space-y-4 p-5"
         onSubmit={(e) => {
           e.preventDefault();
-          void submit();
+          review();
         }}
         aria-labelledby="new-alert-title"
       >
         <div>
-          <h3 id="new-alert-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>New alert</h3>
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>MDRRMO reviews every alert before residents receive it.</p>
+          <h3 id="new-alert-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Publish alert</h3>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            Alerts go straight to residents of {barangay} as a push notification. Up to 5 alerts per hour.
+          </p>
         </div>
         <label className="block">
           <span className="clay-label">For</span>
@@ -131,9 +126,9 @@ export function BarangayAlertsSection({
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="clay-label">Level</span>
+            <span className="clay-label">PAGASA level</span>
             <select className="clay-input" value={level} onChange={(e) => setLevel(e.target.value as AlertLevel)} disabled={saving}>
-              {LEVELS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+              {PAGASA_LEVEL_OPTIONS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
           </label>
           <label className="block">
@@ -163,60 +158,126 @@ export function BarangayAlertsSection({
         )}
         <button type="submit" className="clay-btn clay-btn-primary w-full sm:w-auto" disabled={saving}>
           {saving ? <Loader size={18} className="animate-spin" aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
-          {saving ? "Sending..." : "Send to MDRRMO"}
+          {saving ? "Publishing..." : "Publish alert"}
         </button>
       </form>
 
-      <section aria-labelledby="my-drafts-title" className="space-y-3">
-        <h3 id="my-drafts-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>My drafts</h3>
+      <section aria-labelledby="my-published-title" className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 id="my-published-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>
+            My published alerts ({published.length})
+          </h3>
+          <Link to="/admin/barangay/alerts" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold" style={{ color: "var(--primary-shade)" }}>
+            View all <ChevronRight size={16} aria-hidden="true" />
+          </Link>
+        </div>
         {error ? (
           <p role="alert" className="bg-white px-3 py-2 text-sm" style={{ borderLeft: "4px solid var(--risk-high)", color: "var(--text-primary)" }}>
             Could not load your alerts: {error}
           </p>
         ) : loading ? (
           <div className="clay h-24 animate-pulse" aria-busy="true" />
-        ) : drafts.length === 0 ? (
-          <div className="clay p-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>No alert drafts for {barangay} yet</div>
+        ) : published.length === 0 ? (
+          <div className="clay p-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>No alerts published for {barangay} yet</div>
         ) : (
-          <ul className="space-y-3">
-            {drafts.map((a) => (
-              <li key={a.id} id={`alert-${a.id}`} className="clay space-y-2 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <AlertLevelBadge level={a.level} />
-                  <DraftStatus status={a.status} />
-                  <span className="ml-auto text-xs" style={{ color: "var(--text-secondary)" }}>{formatManilaDateTime(a.sent_at)}</span>
-                </div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{a.title}</p>
-                <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>{a.message}</p>
-                {a.status === "rejected" && (
-                  <p className="bg-white px-3 py-2 text-sm" style={{ borderLeft: "4px solid var(--risk-high)", color: "var(--text-primary)" }}>
-                    <span className="font-semibold">Reason:</span> {a.rejection_reason?.trim() || "No reason given"}
-                  </p>
-                )}
+          <AlertScrollList label="My published alerts">
+            {published.map((a) => (
+              <li key={a.id}>
+                <CollapsibleAlertCard
+                  id={`alert-${a.id}`}
+                  alert={a}
+                  now={now}
+                  showStatus
+                  actions={
+                    a.status === "approved" ? (
+                      <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={() => setWithdrawing(a)}>
+                        <Undo2 size={16} aria-hidden="true" /> Withdraw
+                      </button>
+                    ) : null
+                  }
+                />
               </li>
             ))}
-          </ul>
+          </AlertScrollList>
         )}
       </section>
 
-      {autoAlerts.length > 0 && (
-        <section aria-labelledby="auto-alerts-title" className="space-y-3">
-          <h3 id="auto-alerts-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Automated warnings</h3>
-          <ul className="space-y-3">
-            {autoAlerts.map((a) => (
-              <li key={a.id} id={`alert-${a.id}`} className="clay space-y-2 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <AlertLevelBadge level={a.level} />
-                  <DraftStatus status={a.status} />
-                  <span className="ml-auto text-xs" style={{ color: "var(--text-secondary)" }}>{formatManilaDateTime(a.sent_at)}</span>
-                </div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{a.title}</p>
-                <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>{a.message}</p>
+      {otherAlerts.length > 0 && (
+        <section aria-labelledby="other-alerts-title" className="space-y-3">
+          <h3 id="other-alerts-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>From MDRRMO and automatic warnings</h3>
+          <AlertScrollList label="MDRRMO and automatic alerts">
+            {otherAlerts.map((a) => (
+              <li key={a.id}>
+                <CollapsibleAlertCard id={`alert-${a.id}`} alert={a} now={now} showStatus />
               </li>
             ))}
-          </ul>
+          </AlertScrollList>
         </section>
       )}
+
+      {confirming && (
+        <ConfirmPublish
+          barangay={barangay}
+          draft={confirming}
+          saving={saving}
+          onCancel={() => !saving && setConfirming(null)}
+          onConfirm={() => void publish()}
+        />
+      )}
+
+      {withdrawing && (
+        <ReasonDialog
+          title="Withdraw alert"
+          subtitle={`${pagasaText(withdrawing.level)} · ${withdrawing.title}. Residents will no longer see it.`}
+          presets={ALERT_REJECT_REASONS}
+          confirmLabel="Withdraw alert"
+          danger
+          minLength={3}
+          fieldLabel="Reason"
+          onClose={() => setWithdrawing(null)}
+          onConfirm={async (reason) => {
+            onChanged(await withdrawAlert(withdrawing.id, reason));
+            setWithdrawing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmPublish({
+  barangay,
+  draft,
+  saving,
+  onCancel,
+  onConfirm,
+}: {
+  barangay: string;
+  draft: Draft;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" onClick={(e) => e.target === e.currentTarget && onCancel()} onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-publish-title" aria-describedby="confirm-publish-text" className="clay w-full max-w-md space-y-4 p-6">
+        <h3 id="confirm-publish-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Publish this alert?</h3>
+        <p id="confirm-publish-text" className="text-sm" style={{ color: "var(--text-primary)" }}>
+          This sends a push notification to residents of {barangay} immediately.
+        </p>
+        <div className="bg-white p-3 text-sm" style={{ borderLeft: "4px solid var(--primary-shade)" }}>
+          <p className="text-xs font-bold" style={{ color: "var(--text-secondary)" }}>Push preview</p>
+          <p className="font-semibold" style={{ color: "var(--text-primary)" }}>[{pagasaText(draft.level)}] {draft.title}</p>
+          <p className="line-clamp-3 font-normal" style={{ color: "var(--text-secondary)" }}>{draft.message}</p>
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="clay-btn clay-btn-secondary" onClick={onCancel} disabled={saving} autoFocus>Cancel</button>
+          <button type="button" className="clay-btn clay-btn-primary" onClick={onConfirm} disabled={saving}>
+            {saving ? <Loader size={16} className="animate-spin" aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}
+            {saving ? "Publishing..." : "Publish alert"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

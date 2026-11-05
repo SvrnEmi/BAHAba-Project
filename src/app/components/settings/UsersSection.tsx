@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapPin, Search } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { parseRole } from "../../../lib/auth";
+import { barangayNamesOrOfficial } from "../../../lib/barangays";
 import { roleLabel, type Role } from "../../../lib/profile";
 import { describeChanges, writeAuditLog } from "../../../lib/audit";
 import { ClayButton } from "../clay/Clay";
@@ -97,17 +98,9 @@ export function UsersSection({ adminId, adminEmail }: { adminId: string; adminEm
   useEffect(() => {
     if (!editing || barangays) return;
     let cancelled = false;
-    void supabase
-      .from("barangays")
-      .select("name")
-      .order("name")
-      .then(({ data, error: barangayError }) => {
-        if (cancelled) return;
-        if (barangayError) console.error("Unable to load barangays:", barangayError);
-        setBarangays(
-          ((data as { name: unknown }[] | null) ?? []).map((b) => String(b.name ?? "")).filter(Boolean),
-        );
-      });
+    void barangayNamesOrOfficial().then((names) => {
+      if (!cancelled) setBarangays(names);
+    });
     return () => {
       cancelled = true;
     };

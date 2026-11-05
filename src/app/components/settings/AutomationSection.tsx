@@ -9,8 +9,6 @@ import { EmptyNote, LoadGate, NumberField, SwitchRow, num, parseNumber, useSecti
 
 type RiskSettings = {
   auto_enabled: boolean;
-  auto_publish_high: boolean;
-  draft_alerts: boolean;
   medium_mm_3h: number;
   high_mm_3h: number;
   medium_mm_24h: number;
@@ -23,7 +21,7 @@ type NumberKey = "medium_mm_3h" | "high_mm_3h" | "medium_mm_24h" | "high_mm_24h"
 type Form = Omit<RiskSettings, NumberKey> & Record<NumberKey, string>;
 
 const COLUMNS =
-  "auto_enabled, auto_publish_high, draft_alerts, medium_mm_3h, high_mm_3h, medium_mm_24h, high_mm_24h, override_hours, holddown_hours";
+  "auto_enabled, medium_mm_3h, high_mm_3h, medium_mm_24h, high_mm_24h, override_hours, holddown_hours";
 
 const DEFAULTS: Record<NumberKey, number> = {
   medium_mm_3h: 30,
@@ -38,8 +36,6 @@ const THRESHOLDS: NumberKey[] = ["medium_mm_3h", "high_mm_3h", "medium_mm_24h", 
 
 const LABELS: Record<keyof RiskSettings, string> = {
   auto_enabled: "Automatic flood level updates",
-  auto_publish_high: "Auto-publish HIGH risk alerts",
-  draft_alerts: "Draft alerts at high risk",
   medium_mm_3h: "MEDIUM rainfall in 3 h (mm)",
   high_mm_3h: "HIGH rainfall in 3 h (mm)",
   medium_mm_24h: "MEDIUM rainfall in 24 h (mm)",
@@ -52,8 +48,6 @@ const LABELS: Record<keyof RiskSettings, string> = {
 function fromRow(row: Record<string, unknown>): RiskSettings {
   return {
     auto_enabled: row.auto_enabled === true,
-    auto_publish_high: row.auto_publish_high === true,
-    draft_alerts: row.draft_alerts === true,
     medium_mm_3h: num(row.medium_mm_3h, DEFAULTS.medium_mm_3h),
     high_mm_3h: num(row.high_mm_3h, DEFAULTS.high_mm_3h),
     medium_mm_24h: num(row.medium_mm_24h, DEFAULTS.medium_mm_24h),
@@ -99,7 +93,7 @@ function validate(form: Form): { errors: Partial<Record<NumberKey, string>>; val
   if (Object.keys(errors).length) return { errors, values: null };
   return {
     errors,
-    values: { auto_enabled: form.auto_enabled, auto_publish_high: form.auto_publish_high, draft_alerts: form.draft_alerts, ...n },
+    values: { auto_enabled: form.auto_enabled, ...n },
   };
 }
 
@@ -144,7 +138,6 @@ function AutomationForm({
     if (!values) return;
     const warnings: string[] = [];
     if (saved.auto_enabled && !values.auto_enabled) warnings.push("turn OFF automatic flood level updates");
-    if (!saved.auto_publish_high && values.auto_publish_high) warnings.push("auto-publish HIGH risk alerts to residents without review");
     for (const key of THRESHOLDS) {
       const before = saved[key];
       if (before > 0 && Math.abs(values[key] - before) / before > 0.5) {
@@ -204,19 +197,6 @@ function AutomationForm({
           checked={form.auto_enabled}
           disabled={saving}
           onChange={(v) => set("auto_enabled", v)}
-        />
-        <SwitchRow
-          label="Auto-publish HIGH risk alerts to residents"
-          hint="When off, alerts are drafted for MDRRMO approval."
-          checked={form.auto_publish_high}
-          disabled={saving}
-          onChange={(v) => set("auto_publish_high", v)}
-        />
-        <SwitchRow
-          label="Draft alerts when a barangay reaches high risk"
-          checked={form.draft_alerts}
-          disabled={saving}
-          onChange={(v) => set("draft_alerts", v)}
         />
       </div>
 

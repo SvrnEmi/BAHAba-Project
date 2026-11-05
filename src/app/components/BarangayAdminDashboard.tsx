@@ -6,7 +6,8 @@ import { useAuth } from "../../lib/auth";
 import { subscribeToTable } from "../../lib/realtime";
 import { displayReporterName, waterLevelLabel } from "../../lib/reports";
 import { waterLevelInfo } from "../../lib/quickReport";
-import { errorMessage, legacyCreatedBy, notifyBrowser, toTime } from "../../lib/barangayAdmin";
+import { errorMessage, notifyBrowser, toTime } from "../../lib/barangayAdmin";
+import { STATUS_LABELS, pagasaText } from "../../lib/alerts";
 import { BrandLogo } from "./BrandLogo";
 import {
   BarangayStatusPanel,
@@ -54,7 +55,6 @@ export function BarangayAdminDashboard() {
   const navigate = useNavigate();
   const { session, signOut } = useAuth();
   const userId = session?.user.id ?? null;
-  const email = session?.user.email ?? null;
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -76,7 +76,7 @@ export function BarangayAdminDashboard() {
   const [alerts, setAlerts] = useState<BarangayAlertRow[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsError, setAlertsError] = useState<string | null>(null);
-  // When this session saw a draft get reviewed (the table has no review time).
+  // When this session saw an alert's status change (the table has no time for it).
   const [reviewedAt, setReviewedAt] = useState<Record<string, number>>({});
 
   const [tab, setTab] = useState<Tab>("reports");
@@ -111,7 +111,6 @@ export function BarangayAdminDashboard() {
     };
   }, [userId]);
 
-  const myName = profile?.name ?? email ?? (barangay ? legacyCreatedBy(barangay) : "Barangay Admin");
 
   // Clock for relative times and the current-hour bar (no data requests).
   useEffect(() => {
@@ -271,7 +270,7 @@ export function BarangayAdminDashboard() {
         const alert = toAlert(payload.new as Record<string, unknown>);
         if (alert.target_barangay !== barangay) return;
         const before = alertsRef.current.find((a) => a.id === alert.id);
-        if (before && before.status !== alert.status && (alert.status === "approved" || alert.status === "rejected")) {
+        if (before && before.status !== alert.status && (alert.status === "approved" || alert.status === "withdrawn")) {
           setReviewedAt((current) => ({ ...current, [`${alert.id}-${alert.status}`]: Date.now() }));
         }
         setAlerts((current) => [alert, ...current.filter((a) => a.id !== alert.id)].sort((a, b) => toTime(b.sent_at) - toTime(a.sent_at)));
@@ -333,15 +332,9 @@ export function BarangayAdminDashboard() {
   }, [myBarangayId, loadForecast]);
 
   // 4. Derived lists.
-  const isMine = useCallback(
-    (a: BarangayAlertRow) =>
-      a.source !== "auto" &&
-      !!a.created_by &&
-      [profile?.name, email, barangay ? legacyCreatedBy(barangay) : null].filter(Boolean).includes(a.created_by),
-    [profile?.name, email, barangay],
-  );
-  const drafts = useMemo(() => alerts.filter(isMine), [alerts, isMine]);
-  const autoAlerts = useMemo(() => alerts.filter((a) => a.source === "auto"), [alerts]);
+  // Published by this barangay (the server sets source = barangay on every barangay insert).
+  const published = useMemo(() => alerts.filter((a) => a.source === "barangay"), [alerts]);
+  const otherAlerts = useMemo(() => alerts.filter((a) => a.source !== "barangay" && a.status === "approved"), [alerts]);
 
   const feed = useMemo<BarangayUpdate[]>(() => {
     const list: BarangayUpdate[] = [];
@@ -371,18 +364,18 @@ export function BarangayAdminDashboard() {
           key: `auto-${a.id}`,
           kind: "auto",
           title: a.title || "Automated warning",
-          detail: a.status === "approved" ? "Automated warning sent" : `Automated warning · ${a.status}`,
+          detail: a.status === "approved" ? "Automated warning sent" : `Automated warning · ${STATUS_LABELS[a.status].toLowerCase()}`,
           time: toTime(a.sent_at),
           target: { tab: "alerts", elementId: `alert-${a.id}` },
         });
-      } else if (isMine(a) && (a.status === "approved" || a.status === "rejected")) {
-        const approved = a.status === "approved";
+      } else if (a.source === "barangay" && (a.status === "approved" || a.status === "withdrawn")) {
+        const live = a.status === "approved";
         list.push({
-          key: `draft-${a.id}-${a.status}`,
-          kind: approved ? "approved" : "rejected",
-          title: `${approved ? "Alert approved" : "Alert rejected"}: ${a.title || "Alert"}`,
-          detail: approved ? "Sent to residents by MDRRMO" : `Reason: ${a.rejection_reason?.trim() || "No reason given"}`,
-          time: reviewedAt[`${a.id}-${a.status}`] ?? toTime(a.sent_at),
+          key: `published-${a.id}-${a.status}`,
+          kind: live ? "published" : "withdrawn",
+          title: `${live ? "Alert published" : "Alert withdrawn"}: ${a.title || "Alert"}`,
+          detail: live ? `${pagasaText(a.level)} · sent to residents` : `Reason: ${a.withdrawn_reason?.trim() || "No reason given"}`,
+          time: reviewedAt[`${a.id}-${a.status}`] ?? toTime(live ? a.sent_at : a.withdrawn_at ?? a.sent_at),
           target: { tab: "alerts", elementId: `alert-${a.id}` },
         });
       }
@@ -398,7 +391,7 @@ export function BarangayAdminDashboard() {
       });
     }
     return list.filter((i) => i.time > 0).sort((x, y) => y.time - x.time).slice(0, FEED_LIMIT);
-  }, [reports, quick, alerts, levelEvents, reviewedAt, isMine]);
+  }, [reports, quick, alerts, levelEvents, reviewedAt]);
 
   const feedLoading = statusLoading || reportsLoading || quickLoading || alertsLoading;
   const feedState = useFeedState(feed, feedLoading, userId);
@@ -497,7 +490,7 @@ export function BarangayAdminDashboard() {
   }
 
   const pendingCount = reports.filter((r) => !isApprovedStatus(r.status) && r.status !== "rejected").length;
-  const pendingDrafts = drafts.filter((a) => a.status === "pending").length;
+  const livePublished = published.filter((a) => a.status === "approved").length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -533,7 +526,7 @@ export function BarangayAdminDashboard() {
                 Reports{pendingCount ? ` (${pendingCount} pending)` : ""}
               </button>
               <button type="button" role="tab" aria-selected={tab === "alerts"} className="clay-tab" onClick={() => setTab("alerts")}>
-                Alert drafts{pendingDrafts ? ` (${pendingDrafts} pending)` : ""}
+                Alerts{livePublished ? ` (${livePublished} live)` : ""}
               </button>
             </div>
 
@@ -579,12 +572,14 @@ export function BarangayAdminDashboard() {
               ) : (
                 <BarangayAlertsSection
                   barangay={barangay}
-                  createdBy={myName}
-                  drafts={drafts}
-                  autoAlerts={autoAlerts}
+                  published={published}
+                  otherAlerts={otherAlerts}
                   loading={alertsLoading}
                   error={alertsError}
-                  onCreated={(alert) => setAlerts((current) => [alert, ...current.filter((a) => a.id !== alert.id)])}
+                  now={now}
+                  onChanged={(alert) =>
+                    setAlerts((current) => [alert, ...current.filter((a) => a.id !== alert.id)].sort((a, b) => toTime(b.sent_at) - toTime(a.sent_at)))
+                  }
                 />
               )}
             </div>

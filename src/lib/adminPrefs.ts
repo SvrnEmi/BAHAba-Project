@@ -7,7 +7,7 @@
 export type AdminPopupPrefs = {
   /** Popup when a resident submits a new report awaiting review. */
   pendingReports: boolean;
-  /** Popup when a barangay admin submits a new alert awaiting review. */
+  /** Popup when a barangay admin publishes a new alert. */
   barangayAlerts: boolean;
   /** Short sound together with a popup. */
   sound: boolean;

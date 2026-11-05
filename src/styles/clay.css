@@ -48,6 +48,11 @@
   /* Latest-report card. White on the sketch teal #0a93ae is 3.6:1, so the
      card uses a darker teal (5.0:1). Swap to #0a93ae for the exact sketch. */
   --report-teal: #087a90;
+
+  /* PAGASA alert colors. Always shown with the text label (never color alone). */
+  --pagasa-yellow: #f2c200;
+  --pagasa-orange: #e8730c;
+  --pagasa-red: #c0392b;
 }
 
 @layer components {
@@ -156,6 +161,8 @@
   box-shadow: 0 0 0 1px var(--primary-brand), inset 2px 2px 4px rgb(118 146 184 / 0.25);
 }
 .clay-input.has-icon-left { padding-left: 44px; }
+/* Search bars have their own clear button; hide the browser's. */
+.clay-input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .clay-input.has-icon-right { padding-right: 48px; }
 
 .clay-label {
@@ -237,6 +244,18 @@
 .risk-badge-high { background: var(--risk-high); color: #fff; }
 .risk-badge-info { background: var(--primary-shade); color: #fff; }
 .risk-badge-neutral { background: var(--text-secondary); color: #fff; }
+/* PAGASA badges: yellow and orange carry dark text (contrast), red white. */
+.pagasa-badge-yellow { background: var(--pagasa-yellow); color: var(--text-primary); }
+.pagasa-badge-orange { background: var(--pagasa-orange); color: #1b1b1b; }
+.pagasa-badge-red { background: var(--pagasa-red); color: #fff; }
+
+/* Bounded alert lists: about 40% of the viewport, scrolling inside. */
+.alert-scroll {
+  max-height: 40vh;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 
 /* ---------- Map: live user location ---------- */
 

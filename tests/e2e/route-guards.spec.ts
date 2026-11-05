@@ -52,7 +52,7 @@ async function mockSupabase(context: BrowserContext) {
     if (route.request().method() === "HEAD") return route.fulfill({ status: 200, headers: { "content-range": "0-0/0" }, body: "" });
     if (table === "profiles") {
       const role = roleOf(url.search);
-      const row = role ? [{ id: accounts[role].id, role, name: `Test ${role}`, email: accounts[role].email, phone: "09170000000", barangay: "Poblacion" }] : [];
+      const row = role ? [{ id: accounts[role].id, role, name: `Test ${role}`, email: accounts[role].email, phone: "09170000000", barangay: "Poctoy" }] : [];
       return route.fulfill({ json: row });
     }
     return route.fulfill({ json: [] });
@@ -79,6 +79,9 @@ async function neverShows(page: Page, text: string) {
   return async () =>
     expect(await page.evaluate(() => (window as unknown as { __forbidden?: boolean }).__forbidden ?? false), `"${text}" was rendered`).toBe(false);
 }
+
+// Reads a signed-out page may make: the session check and the app download link.
+const PUBLIC_PAGE_READS = ["profiles", "app_versions"];
 
 let queried: string[] = [];
 test.beforeEach(async ({ context, page }) => {
@@ -197,7 +200,7 @@ test.describe("route guards", () => {
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("alert")).toContainText("couldn't load your account profile");
     await check();
-    expect(queried.filter((t) => t !== "profiles")).toEqual([]);
+    expect(queried.filter((t) => !PUBLIC_PAGE_READS.includes(t))).toEqual([]);
 
     // Signed out for real: the session is not restored on reload.
     await page.goto("/alerts", { waitUntil: "domcontentloaded" });
@@ -237,7 +240,7 @@ test.describe("route guards", () => {
       await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
     }
     await check();
-    expect(queried.filter((t) => t !== "profiles")).toEqual([]);
+    expect(queried.filter((t) => !PUBLIC_PAGE_READS.includes(t))).toEqual([]);
   });
 
   test("logout clears the session; Back and typed URLs go to login", async ({ page }) => {
@@ -365,7 +368,7 @@ test.describe("MDRRMO settings", () => {
   });
 
   test("risk rules: save is disabled until changed, validates, and writes the row", async ({ page }) => {
-    const row = { auto_enabled: true, auto_publish_high: false, draft_alerts: true, medium_mm_3h: 30, high_mm_3h: 60, medium_mm_24h: 50, high_mm_24h: 100, override_hours: 6, holddown_hours: 3 };
+    const row = { auto_enabled: true, medium_mm_3h: 30, high_mm_3h: 60, medium_mm_24h: 50, high_mm_24h: 100, override_hours: 6, holddown_hours: 3 };
     const writes: string[] = [];
     await page.route(/\/rest\/v1\/risk_settings/, (route) => {
       if (route.request().method() === "PATCH") {
@@ -403,6 +406,8 @@ test.describe("MDRRMO settings", () => {
     expect(dialogs.some((m) => m.includes("more than 50%"))).toBe(true);
     expect(writes).toHaveLength(1);
     expect(JSON.parse(writes[0])).toMatchObject({ high_mm_3h: 100, medium_mm_3h: 30 });
+    expect(JSON.parse(writes[0])).not.toHaveProperty("auto_publish_high");
+    expect(JSON.parse(writes[0])).not.toHaveProperty("draft_alerts");
     expect(queried).toContain("audit_logs");
     await expect(save).toBeDisabled();
   });

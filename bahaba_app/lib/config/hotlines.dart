@@ -3,9 +3,9 @@
 /// TODO: Replace the null placeholders with the official MDRRMO Odiongan and
 /// Barangay Hall numbers. A null number shows "Hotline not set yet" instead
 /// of a call button. Keep this list in sync with
-/// src/lib/emergencyContacts.ts in the web app.
-class EmergencyContacts {
-  EmergencyContacts._();
+/// src/lib/hotlines.ts in the web app.
+class Hotlines {
+  Hotlines._();
 
   /// National emergency hotline (Philippines).
   static const String nationalEmergency = '911';

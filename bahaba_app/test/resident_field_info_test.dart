@@ -1,7 +1,5 @@
 import 'package:bahaba_app/config/app_strings.dart';
 import 'package:bahaba_app/models/alert_model.dart';
-import 'package:bahaba_app/screens/emergency_contacts_screen.dart';
-import 'package:bahaba_app/services/emergency_contacts_service.dart';
 import 'package:bahaba_app/services/field_observations_service.dart';
 import 'package:bahaba_app/widgets/alert_card.dart';
 import 'package:bahaba_app/widgets/ground_reports_card.dart';
@@ -152,44 +150,6 @@ void main() {
       await tester.pump();
       expect(find.text(AppStrings.groundRetry), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
-    });
-  });
-
-  group('Emergency contacts', () {
-    const municipal = EmergencyContact(id: 1, name: 'Desk', phone: '0917 000 0000');
-    const local = EmergencyContact(id: 2, barangay: 'Amatong', name: 'Captain', role: 'Barangay Captain', phone: '+63 (917) 000-0001');
-
-    test('dial numbers keep only digits and +', () {
-      expect(local.dialNumber, '+639170000001');
-    });
-
-    testWidgets('guest: municipal first, then the picked barangay', (tester) async {
-      final asked = <String?>[];
-      await tester.pumpWidget(MaterialApp(
-        home: EmergencyContactsScreen(
-          guest: true,
-          read: (barangay) async {
-            asked.add(barangay);
-            return barangay == null ? [municipal] : [municipal, local];
-          },
-        ),
-      ));
-      await tester.pump();
-      expect(find.text(AppStrings.contactsMunicipal), findsOneWidget);
-      expect(find.text('Desk'), findsOneWidget);
-      expect(find.text('Captain'), findsNothing);
-      expect(asked, [null]);
-    });
-
-    testWidgets('nothing added: the exact empty text', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: EmergencyContactsScreen(guest: true, read: (_) async => const []),
-      ));
-      await tester.pump();
-      expect(
-        find.text('No contacts have been added yet. Call the MDRRMO at +63 919 079 8427.'),
-        findsOneWidget,
-      );
     });
   });
 }

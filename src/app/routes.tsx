@@ -18,7 +18,6 @@ import { BarangaySettings } from "./components/settings/BarangaySettings";
 import { ProtectedRoute, PublicOnlyRoute, RoleHomeRedirect, WelcomeRoute } from "./components/ProtectedRoute";
 import { Welcome } from "./components/Welcome";
 import { AllAlertsPage } from "./components/alerts/AllAlertsPage";
-import { EmergencyContactsPage } from "./components/EmergencyContactsPage";
 import { GuestConditions } from "./components/GuestConditions";
 import { RainfallInfoPage } from "./components/RainfallInfo";
 import { RESIDENT_ONLY, ROUTE_ROLES } from "../lib/auth";
@@ -46,11 +45,6 @@ export const router = createBrowserRouter([
     // Public: what officials report from the ground, for a barangay the guest picks.
     path: "/conditions",
     element: <GuestConditions />,
-  },
-  {
-    // Public: contacts for guests. Residents have the same page at /contacts.
-    path: "/emergency-contacts",
-    element: <EmergencyContactsPage />,
   },
   {
     // Public, signed in or not.
@@ -111,7 +105,6 @@ export const router = createBrowserRouter([
       { path: "/alerts/all", element: <AllAlertsPage role="resident" /> },
       { path: "/reports", element: <CommunityReports /> },
       { path: "/reports/:id", element: <PostedReportPage /> },
-      { path: "/contacts", element: <EmergencyContactsPage /> },
     ],
   },
   {

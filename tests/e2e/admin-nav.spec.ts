@@ -50,7 +50,7 @@ async function signIn(page: Page, email: string, path: string) {
   await page.waitForURL(`**${path}`);
 }
 
-const MDRRMO_TABS = ["Create Alert", "Verify Reports", "Quick Reports", "Flood Events", "Overview", "Audit Trail", "Emergency Contacts", "Field Observations"];
+const MDRRMO_TABS = ["Create Alert", "Verify Reports", "Quick Reports", "Flood Events", "Overview", "Audit Trail", "Field Observations"];
 
 for (const [name, viewport] of [["desktop", { width: 1360, height: 900 }], ["mobile", { width: 390, height: 844 }]] as const) {
   test(`MDRRMO tabs are in order and Create Alert opens first (${name})`, async ({ browser }) => {
@@ -98,7 +98,7 @@ test("barangay tabs keep the same order and labels; Quick Reports is its own tab
 
   const tablist = page.getByRole("tablist", { name: "Dashboard sections" });
   const labels = (await tablist.getByRole("tab").allInnerTexts()).map((t) => t.replace(/\s*\(.*\)\s*$/, "").trim());
-  expect(labels).toEqual(["Create Alert", "Verify Reports", "Quick Reports", "Field Observations", "Emergency Contacts"]);
+  expect(labels).toEqual(["Create Alert", "Verify Reports", "Quick Reports", "Field Observations"]);
   await expect(page.getByRole("tablist", { name: "Report type" })).toHaveCount(0);
 
   await tablist.getByRole("tab", { name: /Create Alert/ }).click();

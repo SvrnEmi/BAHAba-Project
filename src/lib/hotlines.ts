@@ -4,7 +4,7 @@
  * TODO: Replace the null placeholders with the official MDRRMO Odiongan and
  * Barangay Hall numbers. A null number shows "Hotline not set yet" instead
  * of a call button. Keep this list in sync with
- * bahaba_app/lib/config/emergency_contacts.dart.
+ * bahaba_app/lib/config/hotlines.dart.
  */
 
 /** National emergency hotline (Philippines). */

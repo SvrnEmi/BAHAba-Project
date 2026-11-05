@@ -1,5 +1,3 @@
-import '../services/quick_report_service.dart';
-
 /// Text for the resident and guest screens, kept together so it can be
 /// translated later. Add new resident or guest text here, not in a widget.
 /// src/lib/strings.ts in the web app holds the same text.
@@ -11,7 +9,6 @@ class AppStrings {
   static const navAlerts = 'Alerts';
   static const navReports = 'Reports';
   static const navMap = 'Map';
-  static const navContacts = 'Emergency Contacts';
 
   // Alerts
   static const alertsTitle = 'Alerts & Notifications';
@@ -105,29 +102,11 @@ class AppStrings {
   static const popupView = 'View';
   static const popupDismiss = 'Dismiss';
 
-  // Emergency contacts
-  static const contactsTitle = 'Emergency Contacts';
-  static const contactsSubtitle = 'Tap a number to call';
-  static const contactsMunicipal = 'Municipal contacts';
-  static String contactsBarangay(String barangay) => '$barangay contacts';
-  static const contactsChecking = 'Loading contacts...';
-  static const contactsLoadFailed =
-      'Could not load the contacts. Check your connection.';
-  static const contactsRetry = 'Try again';
-  static const contactsEmpty =
-      'No contacts have been added yet. Call the MDRRMO at ${QuickReportService.mdrrmoHotlineLabel}.';
-  static String contactsCall(String name, String phone) =>
-      'Call $name at $phone';
-  static String contactsDialFailed(String phone) =>
-      'Could not open the phone app. Please dial $phone.';
-
   // Guests
   static const guestPickBarangay = 'Barangay';
   static const guestChoose = 'Choose a barangay';
-  static const guestMunicipalOnly = 'Municipal contacts only';
   static const guestConditionsTitle = 'Conditions on the ground';
   static const guestConditionsSubtitle =
       'Pick a barangay to see what officials report';
   static const guestConditionsButton = 'Conditions on the ground';
-  static const guestContactsButton = 'Emergency Contacts';
 }

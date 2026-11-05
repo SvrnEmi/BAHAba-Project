@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 /*
- * Barangay dashboard: Field Observations, Emergency Contacts and the alert end
+ * Barangay dashboard: Field Observations and the alert end
  * time, all clear and status chips, against a mocked Supabase that stores rows.
  */
 
@@ -31,12 +31,12 @@ const alertRow = (id: number, extra: Row): Row => ({
   channels: "push", sent_at: minutesAgo(id * 5), rejection_reason: null, withdrawn_reason: null, withdrawn_at: null, pagasa_color: "orange", pagasa_label: "Be Prepared", expires_at: null, is_all_clear: false, ...extra,
 });
 
-type Backend = { observations: Row[]; contacts: Row[]; alerts: Row[]; activeIds: number[]; writes: { table: string; method: string; body: Row }[]; refuse: Record<string, string> };
+type Backend = { observations: Row[]; alerts: Row[]; activeIds: number[]; writes: { table: string; method: string; body: Row }[]; refuse: Record<string, string> };
 
 async function mock(context: BrowserContext, seed: Partial<Backend> = {}) {
-  const db: Backend = { observations: [], contacts: [], alerts: [], activeIds: [], writes: [], refuse: {}, ...seed };
+  const db: Backend = { observations: [], alerts: [], activeIds: [], writes: [], refuse: {}, ...seed };
   let nextId = 1000;
-  const tables: Record<string, Row[]> = { field_observations: db.observations, emergency_contacts: db.contacts, alerts: db.alerts };
+  const tables: Record<string, Row[]> = { field_observations: db.observations, alerts: db.alerts };
 
   await context.route(/supabase\.co/, (route) => route.abort());
   await context.route(/\/auth\/v1\/token/, (route) => route.fulfill({ json: session() }));
@@ -73,9 +73,6 @@ async function mock(context: BrowserContext, seed: Partial<Backend> = {}) {
       return route.fulfill({ json: one ? row : [row] });
     }
     if (table === "active_alerts") return route.fulfill({ json: db.activeIds.map((id) => ({ id })), headers });
-    if (table === "emergency_contacts") {
-      return route.fulfill({ json: [...db.contacts].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)), headers });
-    }
     if (tables[table]) return route.fulfill({ json: tables[table], headers });
     return route.fulfill({ json: one ? null : [], headers });
   });
@@ -253,59 +250,5 @@ test.describe("Create Alert", () => {
     await expect(chip(3, "Cleared")).toBeVisible();
     await expect(chip(4, "Withdrawn")).toBeVisible();
     await expect(page.locator("#alert-4")).toContainText("Reason: Sent by mistake");
-  });
-});
-
-test.describe("Emergency Contacts", () => {
-  const contact = (id: number, name: string, sort: number, barangay: string | null = BARANGAY) => ({ id, barangay, name, role: "Kagawad", phone: "0917 000 0000", sort_order: sort });
-
-  test("validates the phone, adds with the fixed barangay, municipal stays read-only", async ({ page, context }) => {
-    const db = await mock(context, { contacts: [contact(9, "MDRRMO desk", 0, null)] });
-    await open(page, /Emergency Contacts/);
-
-    const municipal = page.locator("section", { has: page.getByRole("heading", { name: "Municipal contacts" }) });
-    await expect(municipal).toContainText("MDRRMO desk");
-    await expect(municipal.getByRole("button")).toHaveCount(0);
-
-    await page.getByLabel("Name").fill("Ana Reyes");
-    for (const bad of ["12345", "0917-ABC-0000"]) {
-      await page.getByLabel("Phone").fill(bad);
-      await page.getByRole("button", { name: "Add contact" }).click();
-      await expect(page.getByRole("alert")).toContainText("Enter a valid phone number");
-    }
-    expect(db.writes).toHaveLength(0);
-
-    await page.getByLabel("Phone").fill("+63 (917) 000-0000");
-    await page.getByRole("button", { name: "Add contact" }).click();
-    await expect(page.getByText("Contact added.")).toBeVisible();
-    expect(db.writes[0].body).toEqual({ barangay: BARANGAY, sort_order: 0, name: "Ana Reyes", role: null, phone: "+63 (917) 000-0000" });
-  });
-
-  test("reorders, edits and deletes, and shows the database's error", async ({ page, context }) => {
-    const db = await mock(context, { contacts: [contact(1, "First", 0), contact(2, "Second", 0), contact(3, "Third", 0)] });
-    page.on("dialog", (d) => void d.accept());
-    await open(page, /Emergency Contacts/);
-
-    const names = () => page.locator('[id^="contact-"] p.font-bold').allInnerTexts();
-    await expect(page.getByRole("button", { name: "Move First up" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Move Third down" })).toBeDisabled();
-
-    await page.getByRole("button", { name: "Move Second up" }).click();
-    await expect.poll(names).toEqual(["Second", "First", "Third"]);
-    expect(db.writes.every((w) => w.method === "PATCH" && Object.keys(w.body).join() === "sort_order")).toBe(true);
-
-    await page.getByRole("button", { name: "Edit Third" }).click();
-    await page.getByLabel("Role (optional)").fill("Captain");
-    await page.getByRole("button", { name: "Save changes" }).click();
-    await expect(page.locator("#contact-3")).toContainText("Captain");
-
-    db.refuse.emergency_contacts = "new row violates row-level security policy";
-    await page.getByRole("button", { name: "Delete Third" }).click();
-    await expect(page.getByRole("alert")).toContainText("new row violates row-level security policy");
-    delete db.refuse.emergency_contacts;
-
-    await page.getByRole("button", { name: "Delete Third" }).click();
-    await expect(page.getByText("Contact deleted.")).toBeVisible();
-    await expect(page.locator("#contact-3")).toHaveCount(0);
   });
 });

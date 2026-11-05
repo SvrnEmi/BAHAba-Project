@@ -2,7 +2,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 /*
  * Resident and guest screens: current alerts from active_alerts, the alert
- * history, "Reported on the ground" and Emergency Contacts, against a mocked
+ * history and "Reported on the ground", against a mocked
  * Supabase. Also checks small phones for sideways scrolling and tiny text.
  */
 
@@ -31,12 +31,11 @@ const alertRow = (id: number, title: string, extra: Row = {}): Row => ({
   sent_at: minutesAgo(id), rejection_reason: null, withdrawn_reason: null, withdrawn_at: null, pagasa_color: "orange", pagasa_label: "Be Prepared", expires_at: null, is_all_clear: false, ...extra,
 });
 const observation = (id: number, location: string, status: string, minutes: number, extra: Row = {}) => ({ id, barangay: BARANGAY, kind: "waterway", location, status, note: null, observed_by: null, observed_at: minutesAgo(minutes), ...extra });
-const contact = (id: number, name: string, barangay: string | null, sort: number) => ({ id, barangay, name, role: "Duty officer", phone: "+63 (917) 000-0000", sort_order: sort });
 
-type Backend = { active: Row[]; alerts: Row[]; observations: Row[]; contacts: Row[]; barangays: Row[]; reads: string[] };
+type Backend = { active: Row[]; alerts: Row[]; observations: Row[]; barangays: Row[]; reads: string[] };
 
 async function mock(context: BrowserContext, seed: Partial<Backend> = {}, signedIn = true) {
-  const db: Backend = { active: [], alerts: [], observations: [], contacts: [], barangays: [], reads: [], ...seed };
+  const db: Backend = { active: [], alerts: [], observations: [], barangays: [], reads: [], ...seed };
   await context.route(/supabase\.co/, (route) => route.abort());
   if (signedIn) {
     await context.route(/\/auth\/v1\/token/, (route) => route.fulfill({ json: session() }));
@@ -61,11 +60,6 @@ async function mock(context: BrowserContext, seed: Partial<Backend> = {}, signed
     if (table === "field_observations") {
       const b = url.searchParams.get("barangay")?.replace("eq.", "");
       return route.fulfill({ json: db.observations.filter((o) => o.barangay === b), headers });
-    }
-    if (table === "emergency_contacts") {
-      const or = url.searchParams.get("or") ?? "";
-      const rows = db.contacts.filter((c) => c.barangay === null || or.includes(`"${String(c.barangay)}"`));
-      return route.fulfill({ json: [...rows].sort((a, b) => Number(a.sort_order) - Number(b.sort_order)), headers });
     }
     return route.fulfill({ json: one ? null : [], headers });
   });
@@ -207,41 +201,11 @@ test.describe("Reported on the ground", () => {
   });
 });
 
-test.describe("Emergency Contacts", () => {
-  test("resident: municipal first, then own barangay, in order, with tel links", async ({ page, context }) => {
-    await mock(context, { contacts: [contact(3, "Captain", BARANGAY, 0), contact(2, "Second desk", null, 1), contact(1, "First desk", null, 0), contact(4, "Elsewhere", "Amatong", 0)] });
-    await signIn(page);
-    await page.getByRole("link", { name: "Emergency Contacts" }).click();
-    await expect(page).toHaveURL(/\/contacts$/);
-
-    await expect(page.getByRole("heading", { level: 2 })).toHaveText(["Municipal contacts", "Tuburan contacts"]);
-    await expect(page.locator("li p.font-bold")).toHaveText(["First desk", "Second desk", "Captain"]);
-    await expect(page.getByRole("link", { name: "Call Captain at +63 (917) 000-0000" })).toHaveAttribute("href", "tel:+639170000000");
-  });
-
-  test("the empty state gives the MDRRMO number", async ({ page, context }) => {
-    await mock(context, {}, false);
-    await page.goto("/emergency-contacts");
-    await expect(page.getByText("No contacts have been added yet. Call the MDRRMO at +63 919 079 8427.")).toBeVisible();
-    await expect(page.getByRole("link", { name: "+63 919 079 8427" })).toHaveAttribute("href", "tel:+639190798427");
-  });
-
-  test("guests get the municipal list and can add a barangay", async ({ page, context }) => {
-    await mock(context, { contacts: [contact(1, "First desk", null, 0), contact(3, "Captain", "Amatong", 0)] }, false);
-    await page.goto("/");
-    await page.getByRole("button", { name: "Emergency Contacts" }).click();
-    await expect(page.locator("li p.font-bold")).toHaveText(["First desk"]);
-    await page.getByLabel("Barangay").selectOption("Amatong");
-    await expect(page.locator("li p.font-bold")).toHaveText(["First desk", "Captain"]);
-  });
-});
-
 test.describe("Small phones", () => {
   const long = "A very long place name beside the old bridge near the public market area";
   const seed = {
     active: [alertRow(1, "An alert with quite a long title about the flooding near the river", { message: "Stay alert" })],
     observations: [observation(1, long, "overflowing", 7 * 60, { note: "Water is over the road and still rising fast" })],
-    contacts: [contact(1, "A contact with a very long name for testing", null, 0)],
   };
 
   const smallText = (page: Page) =>
@@ -265,14 +229,14 @@ test.describe("Small phones", () => {
     const page = await context.newPage();
     await signIn(page);
     await expect(page.getByRole("region", { name: "Reported on the ground" })).toContainText(long);
-    for (const path of ["/home", "/alerts", "/alerts/all", "/map", "/contacts"]) {
+    for (const path of ["/home", "/alerts", "/alerts/all", "/map"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(await sideways(page), path).toBeLessThanOrEqual(0);
       expect(await smallText(page), path).toEqual([]);
     }
     const nav = page.getByRole("navigation", { name: "Main" });
-    await expect(nav.getByRole("link")).toHaveCount(5);
+    await expect(nav.getByRole("link")).toHaveCount(4);
     for (const link of await nav.getByRole("link").all()) await expect(link).toBeInViewport();
     await context.close();
   });
@@ -281,7 +245,7 @@ test.describe("Small phones", () => {
     const context = await browser.newContext({ viewport: { width: 320, height: 568 } });
     await mock(context, seed, false);
     const page = await context.newPage();
-    for (const path of ["/", "/conditions", "/emergency-contacts"]) {
+    for (const path of ["/", "/conditions"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(await sideways(page), path).toBeLessThanOrEqual(0);

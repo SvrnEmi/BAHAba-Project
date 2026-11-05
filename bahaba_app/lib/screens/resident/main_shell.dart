@@ -11,7 +11,6 @@ import '../../services/push_notification_service.dart';
 import '../../services/verified_report_popups.dart';
 import '../../widgets/clay_bottom_nav.dart';
 import '../../widgets/verified_report_dialog.dart';
-import '../emergency_contacts_screen.dart';
 import 'home_screen.dart';
 import 'hazard_map_screen.dart';
 import 'alerts_screen.dart';
@@ -40,13 +39,12 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
-  // Order matches the nav items below: Home, Alerts, Reports, Map, Contacts.
+  // Order matches the nav items below: Home, Alerts, Reports, Map.
   final _screens = const [
     HomeScreen(),
     AlertsScreen(),
     CommunityReportsScreen(),
     HazardMapScreen(),
-    EmergencyContactsScreen(),
   ];
 
   // Held so dispose() can stop their live subscriptions without a context.
@@ -184,11 +182,6 @@ class _MainShellState extends State<MainShell> {
             icon: Icons.map_outlined,
             selectedIcon: Icons.map,
             label: AppStrings.navMap,
-          ),
-          ClayNavItem(
-            icon: Icons.phone_outlined,
-            selectedIcon: Icons.phone,
-            label: AppStrings.navContacts,
           ),
         ],
       ),

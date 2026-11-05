@@ -56,7 +56,6 @@ import { AlertScrollList, CollapsibleAlertCard, DisclosureCard } from "./alerts/
 import { BarangayBroadcastBox, useMdrrmoAlertActions } from "./alerts/MdrrmoAlertActions";
 import { InfoTip } from "./InfoTip";
 import { MdrrmoAnalytics } from "./MdrrmoAnalytics";
-import { MdrrmoContacts } from "./MdrrmoContacts";
 import { MdrrmoObservations } from "./MdrrmoObservations";
 import { ReportPager, ReportSearchControls } from "./ReportSearchControls";
 import {
@@ -782,7 +781,6 @@ export function MDRRMOAdminDashboard() {
           <div className="p-4 sm:p-6">
             {activeTab === "quick-reports" && <QuickReportsPanel />}
             {activeTab === "flood-events" && <FloodEventsPanel />}
-            {activeTab === "emergency-contacts" && <MdrrmoContacts />}
             {activeTab === "field-observations" && <MdrrmoObservations now={now} />}
 
             {/* Overview Tab: summary, then analytics, then the forecast */}

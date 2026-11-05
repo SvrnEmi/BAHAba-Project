@@ -31,7 +31,7 @@ import {
   type NotificationPrefs,
   type Role,
 } from "../../lib/profile";
-import { MDRRMO_ODIONGAN_NUMBER, NATIONAL_EMERGENCY_NUMBER, barangayHallNumber } from "../../lib/emergencyContacts";
+import { MDRRMO_ODIONGAN_NUMBER, NATIONAL_EMERGENCY_NUMBER, barangayHallNumber } from "../../lib/hotlines";
 import { waterLevelLabel } from "../../lib/reports";
 import { useLatestMessages } from "../../lib/reportMessages";
 import { ReportMessages } from "./ReportMessages";

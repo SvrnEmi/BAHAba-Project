@@ -4,7 +4,7 @@ import { strFromU8, unzipSync } from "fflate";
 
 /*
  * MDRRMO dashboard: alert end time, all clear and chips, flood event reports,
- * Emergency Contacts and Field Observations, against a mocked Supabase.
+ * Field Observations, against a mocked Supabase.
  */
 
 test.describe.configure({ timeout: 90_000 });
@@ -57,7 +57,6 @@ type Backend = {
   alerts: Row[];
   activeIds: number[];
   events: Row[];
-  contacts: Row[];
   observations: Row[];
   writes: { table: string; method: string; body: Row }[];
   reads: string[];
@@ -66,9 +65,9 @@ type Backend = {
 };
 
 async function mock(context: BrowserContext, seed: Partial<Backend> = {}) {
-  const db: Backend = { alerts: [], activeIds: [], events: [], contacts: [], observations: [], writes: [], reads: [], rpc: { json: summary }, refuse: {}, ...seed };
+  const db: Backend = { alerts: [], activeIds: [], events: [], observations: [], writes: [], reads: [], rpc: { json: summary }, refuse: {}, ...seed };
   let nextId = 2000;
-  const tables: Record<string, Row[]> = { alerts: db.alerts, emergency_contacts: db.contacts, field_observations: db.observations };
+  const tables: Record<string, Row[]> = { alerts: db.alerts, field_observations: db.observations };
 
   await context.route(/supabase\.co/, (route) => route.abort());
   await context.route(/\/auth\/v1\/token/, (route) => route.fulfill({ json: session() }));
@@ -110,11 +109,6 @@ async function mock(context: BrowserContext, seed: Partial<Backend> = {}) {
     }
     if (table === "active_alerts") return route.fulfill({ json: db.activeIds.map((id) => ({ id })), headers });
     if (table === "flood_events") return route.fulfill({ json: db.events, headers });
-    if (table === "emergency_contacts") {
-      const b = url.searchParams.get("barangay");
-      const rows = db.contacts.filter((c) => (b === "is.null" ? c.barangay === null : b ? `eq.${c.barangay}` === b : true));
-      return route.fulfill({ json: [...rows].sort((x, y) => Number(x.sort_order) - Number(y.sort_order)), headers });
-    }
     if (table === "field_observations") {
       const b = url.searchParams.get("barangay");
       const k = url.searchParams.get("kind");
@@ -330,38 +324,6 @@ test.describe("Flood event report", () => {
 });
 
 test.describe("Other pages", () => {
-  const contact = (id: number, name: string, barangay: string | null, sort: number) => ({ id, barangay, name, role: null, phone: "0917 000 0000", sort_order: sort });
-
-  test("Emergency Contacts: municipal first, filter by barangay, add, reorder, phone rule", async ({ page, context }) => {
-    const db = await mock(context, { contacts: [contact(1, "Desk A", null, 0), contact(2, "Desk B", null, 1), contact(3, "Kagawad", "Tuburan", 0)] });
-    await signIn(page);
-    await openTab(page, /Emergency Contacts/);
-
-    await expect(page.getByRole("heading", { name: "Municipal contacts (2)" })).toBeVisible();
-    await expect(page.locator('[id^="contact-"]', { hasText: "Kagawad" })).toHaveCount(0);
-
-    await page.getByLabel("Name").fill("Desk C");
-    await page.getByLabel("Phone").fill("abc");
-    await page.getByRole("button", { name: "Add contact" }).click();
-    await expect(page.getByRole("alert")).toContainText("Enter a valid phone number");
-    await page.getByLabel("Phone").fill("0917-000-0000");
-    await page.getByRole("button", { name: "Add contact" }).click();
-    await expect(page.getByText("Contact added.")).toBeVisible();
-    expect(db.writes[0].body).toMatchObject({ barangay: null, name: "Desk C", sort_order: 2 });
-
-    await page.getByRole("button", { name: "Move Desk B up" }).click();
-    await expect.poll(() => page.locator('[id^="contact-"] p.font-bold').allInnerTexts()).toEqual(["Desk B", "Desk A", "Desk C"]);
-
-    await page.getByLabel("Show contacts for").selectOption("Tuburan");
-    await expect(page.getByRole("heading", { name: "Tuburan contacts (1)" })).toBeVisible();
-    await expect(page.locator('[id^="contact-"] p.font-bold')).toHaveText(["Kagawad"]);
-    await page.getByLabel("Name").fill("Captain");
-    await page.getByLabel("Phone").fill("0917-000-0001");
-    await page.getByRole("button", { name: "Add contact" }).click();
-    await expect(page.getByText("Contact added.")).toBeVisible();
-    expect(db.writes.at(-1)?.body).toMatchObject({ barangay: "Tuburan", name: "Captain", sort_order: 1 });
-  });
-
   test("Field Observations: all barangays, filters, delete only", async ({ page, context }) => {
     const row = (id: number, barangay: string, kind: string, status: string, location: string) => ({ id, barangay, kind, location, status, note: null, observed_by: null, observed_at: minutesAgo(id * 10) });
     const db = await mock(context, { observations: [row(1, "Tuburan", "waterway", "rising", "Tuburan creek"), row(2, "Amatong", "road", "impassable", "Main road")] });

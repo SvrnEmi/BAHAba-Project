@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:url_launcher/url_launcher.dart';
 
-import '../config/emergency_contacts.dart';
+import '../config/hotlines.dart';
 import '../models/community_report_model.dart';
 import '../models/user_model.dart';
 import '../providers/app_state.dart';
@@ -487,15 +487,15 @@ class _EmergencyButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const mdrrmo = EmergencyContacts.mdrrmoOdiongan;
-    final hall = EmergencyContacts.barangayHall(barangay);
+    const mdrrmo = Hotlines.mdrrmoOdiongan;
+    final hall = Hotlines.barangayHall(barangay);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Full-width rows so the labels never truncate on small phones.
         _button(context, 'Call MDRRMO Odiongan', mdrrmo),
         const SizedBox(height: 10),
-        _button(context, 'Call 911', EmergencyContacts.nationalEmergency),
+        _button(context, 'Call 911', Hotlines.nationalEmergency),
         if (hall != null) ...[
           const SizedBox(height: 10),
           _button(context, 'Call Barangay $barangay Hall', hall),

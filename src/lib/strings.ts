@@ -1,5 +1,3 @@
-import { MDRRMO_HOTLINE } from "./quickReport";
-
 /*
  * Text for the resident and guest screens, kept together so it can be
  * translated later. Add new resident or guest text here, not in a component.
@@ -12,7 +10,6 @@ export const STRINGS = {
     alerts: "Alerts",
     reports: "Reports",
     map: "Map",
-    contacts: "Emergency Contacts",
   },
   alerts: {
     screenTitle: "Alerts & Notifications",
@@ -75,27 +72,12 @@ export const STRINGS = {
     view: "View",
     dismiss: "Dismiss",
   },
-  contacts: {
-    title: "Emergency Contacts",
-    subtitle: "Tap a number to call",
-    municipal: "Municipal contacts",
-    barangay: (barangay: string) => `${barangay} contacts`,
-    checking: "Loading contacts...",
-    loadFailed: "Could not load the contacts:",
-    retry: "Try again",
-    emptyLead: "No contacts have been added yet. Call the MDRRMO at ",
-    emptyEnd: ".",
-    hotline: MDRRMO_HOTLINE,
-    call: (name: string, phone: string) => `Call ${name} at ${phone}`,
-  },
   guest: {
     back: "Back",
     pickBarangay: "Barangay",
     choose: "Choose a barangay",
-    municipalOnly: "Municipal contacts only",
     conditionsTitle: "Conditions on the ground",
     conditionsSubtitle: "Pick a barangay to see what officials report",
     conditionsButton: "Conditions on the ground",
-    contactsButton: "Emergency Contacts",
   },
 } as const;

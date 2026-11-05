@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from "react-router";
-import { Home, Map as MapIcon, Bell, Phone, Users } from "lucide-react";
+import { Home, Map as MapIcon, Bell, Users } from "lucide-react";
 import { STRINGS } from "../../lib/strings";
 import { VerifiedReportPopup } from "./VerifiedReportPopup";
 
@@ -11,7 +11,6 @@ export function Layout() {
     { path: "/alerts", label: STRINGS.nav.alerts, icon: Bell },
     { path: "/reports", label: STRINGS.nav.reports, icon: Users },
     { path: "/map", label: STRINGS.nav.map, icon: MapIcon },
-    { path: "/contacts", label: STRINGS.nav.contacts, icon: Phone },
   ];
 
   return (

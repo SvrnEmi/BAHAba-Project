@@ -1,4 +1,4 @@
-import { Activity, Clock, Eye, History, MapPin, Phone, Radio, Waves, type LucideIcon } from "lucide-react";
+import { Activity, Clock, Eye, History, MapPin, Radio, Waves, type LucideIcon } from "lucide-react";
 
 /*
  * The admin dashboard tabs: the only place that sets their order and labels.
@@ -19,16 +19,15 @@ export const ADMIN_TABS: ReadonlyArray<{ id: AdminTabId; label: string; icon: Lu
 
 export const MDRRMO_DEFAULT_TAB: AdminTabId = ADMIN_TABS[0].id;
 
-export type MdrrmoTabId = AdminTabId | "emergency-contacts" | "field-observations";
+export type MdrrmoTabId = AdminTabId | "field-observations";
 
 /** Shown after the main tabs, under an "Other" label. */
 export const MDRRMO_OTHER_TABS: ReadonlyArray<{ id: MdrrmoTabId; label: string; icon: LucideIcon }> = [
-  { id: "emergency-contacts", label: "Emergency Contacts", icon: Phone },
   { id: "field-observations", label: "Field Observations", icon: Eye },
 ];
 
 type SharedTabId = Extract<AdminTabId, "alerts" | "reports" | "quick-reports">;
-export type BarangayTabId = SharedTabId | "field-observations" | "emergency-contacts";
+export type BarangayTabId = SharedTabId | "field-observations";
 
 const isSharedTab = (tab: (typeof ADMIN_TABS)[number]): tab is (typeof ADMIN_TABS)[number] & { id: SharedTabId } =>
   tab.id === "alerts" || tab.id === "reports" || tab.id === "quick-reports";
@@ -37,5 +36,4 @@ const isSharedTab = (tab: (typeof ADMIN_TABS)[number]): tab is (typeof ADMIN_TAB
 export const BARANGAY_TABS: ReadonlyArray<{ id: BarangayTabId; label: string }> = [
   ...ADMIN_TABS.filter(isSharedTab),
   { id: "field-observations", label: "Field Observations" },
-  { id: "emergency-contacts", label: "Emergency Contacts" },
 ];

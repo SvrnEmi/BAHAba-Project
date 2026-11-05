@@ -58,16 +58,10 @@ export function Welcome() {
             </span>
             <ChevronRight size={20} aria-hidden="true" />
           </button>
-          <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
-            <button type="button" onClick={() => navigate("/conditions")} className="clay-btn clay-btn-secondary h-auto min-h-12 whitespace-normal px-3 py-2 text-sm leading-tight">
-              <Eye size={18} className="shrink-0" aria-hidden="true" />
-              {STRINGS.guest.conditionsButton}
-            </button>
-            <button type="button" onClick={() => navigate("/emergency-contacts")} className="clay-btn clay-btn-secondary h-auto min-h-12 whitespace-normal px-3 py-2 text-sm leading-tight">
-              <Phone size={18} className="shrink-0" aria-hidden="true" />
-              {STRINGS.guest.contactsButton}
-            </button>
-          </div>
+          <button type="button" onClick={() => navigate("/conditions")} className="clay-btn clay-btn-secondary h-auto min-h-12 w-full whitespace-normal px-3 py-2 text-sm leading-tight">
+            <Eye size={18} className="shrink-0" aria-hidden="true" />
+            {STRINGS.guest.conditionsButton}
+          </button>
           {apkUrl && (
             <a href={apkUrl} target="_blank" rel="noopener noreferrer" className="clay-btn clay-btn-secondary w-full">
               <Download size={20} aria-hidden="true" />

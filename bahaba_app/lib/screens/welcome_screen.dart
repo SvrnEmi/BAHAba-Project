@@ -4,7 +4,6 @@ import '../config/app_strings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/hotline_buttons.dart';
-import 'emergency_contacts_screen.dart';
 import 'guest_conditions_screen.dart';
 import 'legal_screen.dart';
 import 'login_screen.dart';
@@ -65,26 +64,11 @@ class WelcomeScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   _QuickReportButton(onTap: () => _open(context, const QuickReportScreen())),
                   const SizedBox(height: 10),
-                  IntrinsicHeight(child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: _GuestLink(
-                          icon: Icons.visibility_outlined,
-                          label: AppStrings.guestConditionsButton,
-                          onTap: () => _open(context, const GuestConditionsScreen()),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _GuestLink(
-                          icon: Icons.phone_outlined,
-                          label: AppStrings.guestContactsButton,
-                          onTap: () => _open(context, const EmergencyContactsScreen(guest: true)),
-                        ),
-                      ),
-                    ],
-                  )),
+                  _GuestLink(
+                    icon: Icons.visibility_outlined,
+                    label: AppStrings.guestConditionsButton,
+                    onTap: () => _open(context, const GuestConditionsScreen()),
+                  ),
 
                   const SizedBox(height: 12),
                   Semantics(
@@ -128,7 +112,7 @@ class WelcomeScreen extends StatelessWidget {
   }
 }
 
-/// One of the two side-by-side links for guests. The label wraps on narrow phones.
+/// A link for guests. The label wraps on narrow phones.
 class _GuestLink extends StatelessWidget {
   final IconData icon;
   final String label;

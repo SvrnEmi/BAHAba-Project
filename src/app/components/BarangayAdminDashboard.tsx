@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router";
 import { LogOut, Settings } from "lucide-react";
+import { Toaster, toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { subscribeToTable } from "../../lib/realtime";
@@ -81,7 +82,7 @@ export function BarangayAdminDashboard() {
   const [reviewedAt, setReviewedAt] = useState<Record<string, number>>({});
 
   const [tab, setTab] = useState<BarangayTabId>("reports");
-  const [reportFilter, setReportFilter] = useState<ReportFilter>("pending");
+  const [reportFilter, setReportFilter] = useState<ReportFilter>("all");
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [loggingOut, setLoggingOut] = useState(false);
@@ -190,18 +191,19 @@ export function BarangayAdminDashboard() {
       .from("quick_reports")
       .select(QUICK_REPORT_COLUMNS)
       .eq("barangay", barangay)
-      .eq("status", "approved")
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(200);
     if (error) {
       setQuickError(error.message);
     } else {
       const rows = (data ?? []) as unknown as BarangayQuickReport[];
-      // Notify about Quick Reports that became visible after the first load.
+      // Notify about pending Quick Reports that arrived after the first load.
       if (knownQuickIds.current) {
         for (const r of rows) {
-          if (!knownQuickIds.current.has(String(r.id))) {
-            notifyBrowser(`New Quick Report - ${barangay}`, `${waterLevelInfo(r.water_level)?.label ?? "Water level"}${r.landmark ? ` near ${r.landmark}` : ""}`);
+          if (r.status === "pending" && !knownQuickIds.current.has(String(r.id))) {
+            const detail = `${waterLevelInfo(r.water_level)?.label ?? "Water level"}${r.landmark ? ` near ${r.landmark}` : ""}`;
+            toast.info(`New Quick Report in ${barangay}`, { description: detail });
+            notifyBrowser(`New Quick Report - ${barangay}`, detail);
           }
         }
       }
@@ -257,7 +259,9 @@ export function BarangayAdminDashboard() {
         }
         setReports((current) => [report, ...current.filter((r) => r.id !== report.id)].sort((a, b) => toTime(b.timestamp) - toTime(a.timestamp)));
         if (payload.eventType === "INSERT") {
-          notifyBrowser(`New flood report - ${barangay}`, `${waterLevelLabel(report.water_level)} at ${report.location?.trim() || "unknown location"}`);
+          const detail = `${waterLevelLabel(report.water_level)} at ${report.location?.trim() || "unknown location"}`;
+          if (report.status === "pending") toast.info(`New report to verify in ${barangay}`, { description: detail });
+          notifyBrowser(`New flood report - ${barangay}`, detail);
         }
       }),
       subscribeToTable("alerts", (payload) => {
@@ -275,7 +279,7 @@ export function BarangayAdminDashboard() {
         }
         setAlerts((current) => [alert, ...current.filter((a) => a.id !== alert.id)].sort((a, b) => toTime(b.sent_at) - toTime(a.sent_at)));
       }),
-      // Quick Reports: RLS shows only approved rows of my barangay; re-read once per burst.
+      // Quick Reports: RLS shows only my barangay's rows; re-read once per burst.
       subscribeToTable("quick_reports", () => {
         window.clearTimeout(quickTimer);
         quickTimer = window.setTimeout(() => {
@@ -353,7 +357,7 @@ export function BarangayAdminDashboard() {
         key: `quick-${q.id}`,
         kind: "quick",
         title: `Quick Report: ${q.landmark?.trim() || "No landmark"}`,
-        detail: `Water: ${waterLevelInfo(q.water_level)?.label ?? "not given"} · approved by MDRRMO`,
+        detail: `Water: ${waterLevelInfo(q.water_level)?.label ?? "not given"} · ${q.status ?? "pending"}`,
         time: toTime(q.created_at),
         target: { tab: "reports", elementId: `quick-report-${q.id}` },
       });
@@ -488,10 +492,12 @@ export function BarangayAdminDashboard() {
   }
 
   const pendingCount = reports.filter((r) => !isApprovedStatus(r.status) && r.status !== "rejected").length;
+  const quickPendingCount = quick.filter((q) => q.status === "pending" && !q.flagged_false).length;
   const livePublished = published.filter((a) => a.status === "approved").length;
 
   return (
     <div className="min-h-screen bg-background">
+      <Toaster position="top-center" richColors />
       {header}
 
       {/* Under 1024px: Recent updates collapses into a bar right under the header. */}
@@ -520,14 +526,20 @@ export function BarangayAdminDashboard() {
 
           <div className="clay p-5">
             <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
-              {BARANGAY_TABS.map(({ id, label }) => (
-                <button key={id} type="button" role="tab" aria-selected={tab === id} className="clay-tab" onClick={() => setTab(id)}>
-                  {label}
-                  {id === "alerts" && livePublished ? ` (${livePublished} live)` : ""}
-                  {id === "reports" && pendingCount ? ` (${pendingCount} pending)` : ""}
-                  {id === "quick-reports" ? ` (${quick.length})` : ""}
-                </button>
-              ))}
+              {BARANGAY_TABS.map(({ id, label }) => {
+                const badge = id === "reports" ? pendingCount : id === "quick-reports" ? quickPendingCount : 0;
+                return (
+                  <button key={id} type="button" role="tab" aria-selected={tab === id} className="clay-tab flex items-center gap-2" onClick={() => setTab(id)}>
+                    {label}
+                    {id === "alerts" && livePublished ? ` (${livePublished} live)` : ""}
+                    {badge ? (
+                      <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: "var(--risk-high)" }}>
+                        {badge}<span className="sr-only"> pending</span>
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mt-5">
@@ -556,6 +568,7 @@ export function BarangayAdminDashboard() {
                     setQuickLoading(true);
                     void loadQuick();
                   }}
+                  onChanged={() => void loadQuick()}
                 />
               ) : tab === "field-observations" ? (
                 <BarangayObservations barangay={barangay} now={now} />

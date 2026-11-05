@@ -1,6 +1,7 @@
 import { Outlet, useLocation, Link } from "react-router";
 import { Home, Map as MapIcon, Bell, Phone, Users } from "lucide-react";
 import { STRINGS } from "../../lib/strings";
+import { VerifiedReportPopup } from "./VerifiedReportPopup";
 
 export function Layout() {
   const location = useLocation();
@@ -15,6 +16,7 @@ export function Layout() {
 
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto bg-background text-ink">
+      <VerifiedReportPopup />
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>

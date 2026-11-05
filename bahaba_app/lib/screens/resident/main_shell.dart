@@ -6,13 +6,17 @@ import '../../providers/app_state.dart';
 import '../../providers/resident_providers.dart';
 import '../../services/alerts_seen_store.dart';
 import '../../services/app_update_service.dart';
+import '../../services/posted_reports_service.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/verified_report_popups.dart';
 import '../../widgets/clay_bottom_nav.dart';
+import '../../widgets/verified_report_dialog.dart';
 import '../emergency_contacts_screen.dart';
 import 'home_screen.dart';
 import 'hazard_map_screen.dart';
 import 'alerts_screen.dart';
 import 'community_reports_screen.dart';
+import 'posted_report_screen.dart';
 
 /// Main shell for the resident app with bottom navigation.
 class MainShell extends StatefulWidget {
@@ -49,6 +53,8 @@ class _MainShellState extends State<MainShell> {
   late final AlertProvider _alertProvider;
   late final ReportProvider _reportProvider;
   late final BarangayProvider _barangayProvider;
+  late final AppState _appState;
+  VerifiedReportWatcher? _reportWatcher;
 
   @override
   void initState() {
@@ -56,6 +62,8 @@ class _MainShellState extends State<MainShell> {
     _alertProvider = context.read<AlertProvider>();
     _reportProvider = context.read<ReportProvider>();
     _barangayProvider = context.read<BarangayProvider>();
+    _appState = context.read<AppState>();
+    _appState.addListener(_syncReportWatcher);
     // Notification taps switch to the Alerts tab (index 1).
     PushNotificationService.instance.attachResidentAlertsTab(_openAlertsTab);
     AppUpdateService.instance.attachHome();
@@ -66,7 +74,45 @@ class _MainShellState extends State<MainShell> {
       _alertProvider.load(
           barangay: context.read<AppState>().currentUser?.barangay);
       _reportProvider.load();
+      _syncReportWatcher();
     });
+  }
+
+  /// Follows the resident's barangay, which can change in Profile.
+  void _syncReportWatcher() {
+    final barangay = _appState.currentUser?.barangay;
+    final userId = AlertsSeenStore.currentUserId;
+    final current = _reportWatcher;
+    if (current?.barangay == barangay && current?.userId == userId) return;
+    current?.stop();
+    _reportWatcher = null;
+    if (barangay == null || barangay.isEmpty || userId == null) return;
+    _reportWatcher = VerifiedReportWatcher(
+      userId: userId,
+      barangay: barangay,
+      show: (reports, catchUp) async {
+        final navigator = PushNotificationService.instance.navigatorKey;
+        final dialogContext = navigator.currentContext;
+        if (!mounted || dialogContext == null) return;
+        await showVerifiedReportDialog(
+          dialogContext,
+          reports: reports,
+          catchUp: catchUp,
+          barangay: barangay,
+          userId: userId,
+          onView: (report) {
+            if (report == null) {
+              navigator.currentState?.popUntil((route) => route.isFirst);
+              _selectTab(0);
+            } else if (PostedReportsService.viewingId != report.id) {
+              navigator.currentState?.push(MaterialPageRoute<void>(
+                builder: (_) => PostedReportScreen(reportId: report.id),
+              ));
+            }
+          },
+        );
+      },
+    )..start();
   }
 
   static const int _alertsTab = MainShell.alertsTab;
@@ -87,6 +133,8 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _appState.removeListener(_syncReportWatcher);
+    _reportWatcher?.stop();
     AppUpdateService.instance.detachHome();
     PushNotificationService.instance.detachResidentAlertsTab(_openAlertsTab);
     _alertProvider.stop();

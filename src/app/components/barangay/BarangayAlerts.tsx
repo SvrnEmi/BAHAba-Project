@@ -115,7 +115,7 @@ export function BarangayAlertsSection({
         aria-labelledby="new-alert-title"
       >
         <div>
-          <h3 id="new-alert-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Publish alert</h3>
+          <h3 id="new-alert-title" className="text-base font-bold" style={{ color: "var(--text-primary)" }}>Create Alert</h3>
           <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
             Alerts go straight to residents of {barangay} as a push notification. Up to 5 alerts per hour.
           </p>

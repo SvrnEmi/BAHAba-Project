@@ -3,18 +3,14 @@ import {
   Users,
   Bell,
   MapPin,
-  Activity,
   Settings,
   CheckCircle,
   Send,
-  Radio,
   Smartphone,
-  Clock,
   XCircle,
   Trash2,
   LogOut,
   Waves,
-  History,
   ChevronRight,
   Droplets,
   Download,
@@ -31,6 +27,7 @@ import { QuickReportsPanel, useQuickReportPendingCount } from "./QuickReportsPan
 import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type FeedAlert, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
 import { NewDot, ReportMessages } from "./ReportMessages";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../lib/reportMessages";
+import { ADMIN_TABS, MDRRMO_DEFAULT_TAB, type AdminTabId } from "../../lib/adminNav";
 import { writeAuditLog } from "../../lib/audit";
 import { displayReporterName, waterLevelLabel } from "../../lib/reports";
 import { formatManilaDateTime } from "../../lib/barangayAdmin";
@@ -94,7 +91,7 @@ interface ReviewToast {
   kind: "report" | "alert";
   title: string;
   description: string;
-  tab: "reports" | "overview";
+  tab: AdminTabId;
 }
 
 const STAT_PASTELS = ["lavender", "peach", "mint"] as const;
@@ -109,7 +106,7 @@ export function MDRRMOAdminDashboard() {
   const [headerHeight, setHeaderHeight] = useState(96);
   // Element to scroll to (and flash) after a Recent updates item switches tabs.
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState<AdminTabId>(MDRRMO_DEFAULT_TAB);
   const [showNotification, setShowNotification] = useState(false);
   const [pendingReviewSummary, setPendingReviewSummary] = useState<{ pendingReportsCount: number } | null>(null);
   const [reviewToasts, setReviewToasts] = useState<ReviewToast[]>([]);
@@ -300,7 +297,7 @@ export function MDRRMOAdminDashboard() {
       setAlerts((current) => [row, ...current.filter((item) => item.id !== row.id)].sort((a, b) => (b.sent_at ?? "").localeCompare(a.sent_at ?? "")));
       if (payload.eventType !== "INSERT") return;
       if (row.source === "barangay") {
-        queueReviewToast("alert", `Barangay ${row.target_barangay} published ${alertPreviewText(row)}.`, "Open barangay alerts", "overview");
+        queueReviewToast("alert", `Barangay ${row.target_barangay} published ${alertPreviewText(row)}.`, "Open barangay alerts", "alerts");
       }
     });
 
@@ -678,16 +675,9 @@ export function MDRRMOAdminDashboard() {
         <div id="mdrrmo-tabs" className="bg-white border border-border rounded-xl mb-6" style={{ scrollMarginTop: headerHeight + 16 }}>
           <div className="border-b border-gray-200 px-4 py-3">
             <div className="flex gap-2 overflow-x-auto" role="tablist">
-              {[
-                { id: "overview", label: "Overview", icon: Activity },
-                { id: "reports", label: "Verify Reports", icon: MapPin, badge: pendingReports.length },
-                { id: "quick-reports", label: "Quick Reports", icon: Waves, badge: quickReportsPending },
-                { id: "alerts", label: "Create System Alert", icon: Radio },
-                { id: "audit", label: "Audit Trail", icon: Clock },
-                { id: "flood-events", label: "Flood Events", icon: History },
-              ].map((tab) => {
+              {ADMIN_TABS.map((tab) => {
                 const TabIcon = tab.icon;
-                const badge = "badge" in tab ? tab.badge : null;
+                const badge = tab.id === "reports" ? pendingReports.length : tab.id === "quick-reports" ? quickReportsPending : null;
                 return (
                   <button
                     key={tab.id}
@@ -739,7 +729,7 @@ export function MDRRMOAdminDashboard() {
                   >
                     <Send size={20} aria-hidden="true" style={{ color: "var(--risk-low)" }} />
                     <span className="flex-1">
-                      <span className="block text-sm font-bold">Create system alert</span>
+                      <span className="block text-sm font-bold">Create alert</span>
                       <span className="block text-xs font-normal" style={{ color: "var(--text-secondary)" }}>Send an alert to one or all barangays</span>
                     </span>
                     <ChevronRight size={18} aria-hidden="true" />
@@ -752,7 +742,7 @@ export function MDRRMOAdminDashboard() {
               </div>
             )}
 
-            {/* Create System Alert Tab */}
+            {/* Create Alert Tab */}
             {activeTab === "alerts" && (
               <div className="space-y-6">
                 {/* Success Notification */}

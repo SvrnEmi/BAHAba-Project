@@ -7,6 +7,7 @@ import { subscribeToTable } from "../../lib/realtime";
 import { displayReporterName, waterLevelLabel } from "../../lib/reports";
 import { waterLevelInfo } from "../../lib/quickReport";
 import { errorMessage, notifyBrowser, toTime } from "../../lib/barangayAdmin";
+import { BARANGAY_TABS, type BarangayTabId } from "../../lib/adminNav";
 import { STATUS_LABELS, pagasaText } from "../../lib/alerts";
 import { BrandLogo } from "./BrandLogo";
 import {
@@ -39,8 +40,6 @@ import { ALERT_COLUMNS, BarangayAlertsSection, toAlert, type BarangayAlertRow } 
  * panel, the lists and the Recent updates column; no polling.
  */
 
-type Tab = "reports" | "alerts";
-type ReportsView = "community" | "quick";
 type Profile = { name: string | null; barangay: string | null };
 type LevelEvent = { key: string; time: number; level: string; source: string };
 
@@ -79,8 +78,7 @@ export function BarangayAdminDashboard() {
   // When this session saw an alert's status change (the table has no time for it).
   const [reviewedAt, setReviewedAt] = useState<Record<string, number>>({});
 
-  const [tab, setTab] = useState<Tab>("reports");
-  const [reportsView, setReportsView] = useState<ReportsView>("community");
+  const [tab, setTab] = useState<BarangayTabId>("reports");
   const [reportFilter, setReportFilter] = useState<ReportFilter>("pending");
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -411,17 +409,15 @@ export function BarangayAdminDashboard() {
       window.setTimeout(() => el.classList.remove("update-target-flash"), 1500);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusTarget, tab, reportsView, reportFilter]);
+  }, [focusTarget, tab, reportFilter]);
 
   const openUpdate = (item: BarangayUpdate) => {
     if (item.kind === "report") {
       const report = reports.find((r) => `report-${r.id}` === item.target.elementId);
       setTab("reports");
-      setReportsView("community");
       if (report) setReportFilter(isApprovedStatus(report.status) ? "approved" : report.status === "rejected" ? "rejected" : "pending");
     } else if (item.kind === "quick") {
-      setTab("reports");
-      setReportsView("quick");
+      setTab("quick-reports");
     } else if (item.kind !== "level") {
       setTab("alerts");
     }
@@ -522,53 +518,43 @@ export function BarangayAdminDashboard() {
 
           <div className="clay p-5">
             <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
-              <button type="button" role="tab" aria-selected={tab === "reports"} className="clay-tab" onClick={() => setTab("reports")}>
-                Reports{pendingCount ? ` (${pendingCount} pending)` : ""}
-              </button>
-              <button type="button" role="tab" aria-selected={tab === "alerts"} className="clay-tab" onClick={() => setTab("alerts")}>
-                Alerts{livePublished ? ` (${livePublished} live)` : ""}
-              </button>
+              {BARANGAY_TABS.map(({ id, label }) => (
+                <button key={id} type="button" role="tab" aria-selected={tab === id} className="clay-tab" onClick={() => setTab(id)}>
+                  {label}
+                  {id === "alerts" && livePublished ? ` (${livePublished} live)` : ""}
+                  {id === "reports" && pendingCount ? ` (${pendingCount} pending)` : ""}
+                  {id === "quick-reports" ? ` (${quick.length})` : ""}
+                </button>
+              ))}
             </div>
 
             <div className="mt-5">
               {tab === "reports" ? (
-                <div className="space-y-4">
-                  <div className="flex flex-wrap gap-2" role="tablist" aria-label="Report type">
-                    <button type="button" role="tab" aria-selected={reportsView === "community"} className="clay-tab" onClick={() => setReportsView("community")}>
-                      Community reports
-                    </button>
-                    <button type="button" role="tab" aria-selected={reportsView === "quick"} className="clay-tab" onClick={() => setReportsView("quick")}>
-                      Quick Reports ({quick.length})
-                    </button>
-                  </div>
-                  {reportsView === "community" ? (
-                    <CommunityReportsSection
-                      barangay={barangay}
-                      userId={userId}
-                      reports={reports}
-                      loading={reportsLoading}
-                      error={reportsError}
-                      filter={reportFilter}
-                      onFilter={setReportFilter}
-                      onRetry={() => {
-                        setReportsLoading(true);
-                        void loadReports();
-                      }}
-                      onUpdated={(updated) => setReports((current) => current.map((r) => (r.id === updated.id ? updated : r)))}
-                    />
-                  ) : (
-                    <QuickReportsSection
-                      barangay={barangay}
-                      rows={quick}
-                      loading={quickLoading}
-                      error={quickError}
-                      onRetry={() => {
-                        setQuickLoading(true);
-                        void loadQuick();
-                      }}
-                    />
-                  )}
-                </div>
+                <CommunityReportsSection
+                  barangay={barangay}
+                  userId={userId}
+                  reports={reports}
+                  loading={reportsLoading}
+                  error={reportsError}
+                  filter={reportFilter}
+                  onFilter={setReportFilter}
+                  onRetry={() => {
+                    setReportsLoading(true);
+                    void loadReports();
+                  }}
+                  onUpdated={(updated) => setReports((current) => current.map((r) => (r.id === updated.id ? updated : r)))}
+                />
+              ) : tab === "quick-reports" ? (
+                <QuickReportsSection
+                  barangay={barangay}
+                  rows={quick}
+                  loading={quickLoading}
+                  error={quickError}
+                  onRetry={() => {
+                    setQuickLoading(true);
+                    void loadQuick();
+                  }}
+                />
               ) : (
                 <BarangayAlertsSection
                   barangay={barangay}

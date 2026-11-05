@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
-import { ALERT_COLUMNS, LEVEL_FROM_COLOR, toAlertRow, type AlertRow, type AlertStatus, type PagasaColor } from "../../../lib/alerts";
+import { ALERT_COLUMNS, EVERY_TARGET, LEVEL_FROM_COLOR, alertLifecycle, endedLifecycle, toAlertRow, useActiveAlertIds, type AlertRow, type AlertStatus, type PagasaColor } from "../../../lib/alerts";
 import { errorMessage } from "../../../lib/barangayAdmin";
 import { useBarangayNames } from "../../../lib/barangays";
 import { CollapsibleAlertCard } from "./AlertDisclosure";
@@ -46,6 +46,7 @@ export function AllAlertsPage({ role }: { role: Role }) {
   const [page, setPage] = useState(1);
 
   const [rows, setRows] = useState<AlertRow[]>([]);
+  const activeIds = useActiveAlertIds(role === "resident" ? null : role === "mdrrmo" ? EVERY_TARGET : barangay, rows);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -257,7 +258,7 @@ export function AllAlertsPage({ role }: { role: Role }) {
           <ul className="space-y-2" aria-busy={loading}>
             {rows.map((alert) => (
               <li key={alert.id}>
-                <CollapsibleAlertCard alert={alert} now={now} showStatus={role !== "resident"} />
+                <CollapsibleAlertCard alert={alert} now={now} showStatus={role !== "resident"} lifecycle={role === "resident" ? endedLifecycle(alert, now) : alertLifecycle(alert, activeIds, now)} />
               </li>
             ))}
           </ul>

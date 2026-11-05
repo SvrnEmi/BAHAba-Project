@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_strings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/hotline_buttons.dart';
+import 'emergency_contacts_screen.dart';
+import 'guest_conditions_screen.dart';
 import 'legal_screen.dart';
 import 'login_screen.dart';
 import 'quick_report_screen.dart';
@@ -31,8 +34,8 @@ class WelcomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Center(child: BrandLogo(size: 112)),
-                  const SizedBox(height: 16),
+                  const Center(child: BrandLogo(size: 80)),
+                  const SizedBox(height: 10),
                   Text(
                     'BAHAba',
                     textAlign: TextAlign.center,
@@ -44,25 +47,46 @@ class WelcomeScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
 
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+                    style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     onPressed: () => _open(context, const LoginScreen()),
                     icon: const Icon(Icons.login),
                     label: const Text('Log in'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     onPressed: () => _open(context, const RegisterScreen()),
                     icon: const Icon(Icons.person_add_alt),
                     label: const Text('Create an account'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   _QuickReportButton(onTap: () => _open(context, const QuickReportScreen())),
+                  const SizedBox(height: 10),
+                  IntrinsicHeight(child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _GuestLink(
+                          icon: Icons.visibility_outlined,
+                          label: AppStrings.guestConditionsButton,
+                          onTap: () => _open(context, const GuestConditionsScreen()),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _GuestLink(
+                          icon: Icons.phone_outlined,
+                          label: AppStrings.guestContactsButton,
+                          onTap: () => _open(context, const EmergencyContactsScreen(guest: true)),
+                        ),
+                      ),
+                    ],
+                  )),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   Semantics(
                     header: true,
                     child: const Text(
@@ -99,6 +123,38 @@ class WelcomeScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One of the two side-by-side links for guests. The label wraps on narrow phones.
+class _GuestLink extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _GuestLink({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

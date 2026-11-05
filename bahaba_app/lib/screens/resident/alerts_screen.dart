@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../config/app_strings.dart';
 import '../../providers/resident_providers.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_container.dart';
@@ -8,7 +9,7 @@ import '../../widgets/alert_card.dart';
 import '../../widgets/screen_header.dart';
 import 'all_alerts_screen.dart';
 
-/// Alerts & Notifications: published alerts for the resident's barangay
+/// Alerts & Notifications: current alerts for the resident's barangay
 /// (and all barangays). Cards are collapsed by default and the list scrolls
 /// inside a box of about 40% of the screen height, so alerts never fill it.
 class AlertsScreen extends StatelessWidget {
@@ -25,8 +26,8 @@ class AlertsScreen extends StatelessWidget {
         children: [
           // Header
           const ScreenHeader(
-            title: 'Alerts & Notifications',
-            subtitle: 'Stay informed about flood risks',
+            title: AppStrings.alertsTitle,
+            subtitle: AppStrings.alertsSubtitle,
             icon: Icons.notifications_outlined,
             chipColor: AppColors.peach,
           ),
@@ -51,14 +52,14 @@ class AlertsScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Flood Alerts',
+                              AppStrings.alertsSection,
                               style: AppText.heading(size: 18),
                             ),
                             Text(
                               provider.barangay == null ||
                                       provider.barangay!.isEmpty
-                                  ? 'From your barangay and the MDRRMO'
-                                  : 'From ${provider.barangay} and the MDRRMO',
+                                  ? AppStrings.alertsFromYours
+                                  : AppStrings.alertsFrom(provider.barangay!),
                               style: const TextStyle(
                                 color: AppColors.textSecondary,
                                 fontSize: 13,
@@ -74,7 +75,7 @@ class AlertsScreen extends StatelessWidget {
                                 barangay: provider.barangay ?? ''),
                           ),
                         ),
-                        child: const Text('View all'),
+                        child: const Text(AppStrings.alertsViewAll),
                       ),
                     ],
                   ),
@@ -83,11 +84,11 @@ class AlertsScreen extends StatelessWidget {
                   if (provider.loading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Text('Checking for alerts...'),
+                      child: Text(AppStrings.alertsChecking),
                     )
                   else if (provider.error != null && provider.alerts.isEmpty)
                     const Text(
-                      'Could not load alerts. Pull down to try again.',
+                      AppStrings.alertsLoadFailed,
                       style: TextStyle(color: AppColors.textSecondary),
                     )
                   else if (provider.alerts.isEmpty)
@@ -104,7 +105,7 @@ class AlertsScreen extends StatelessWidget {
                           ),
                           SizedBox(height: 12),
                           Text(
-                            'No alerts for your barangay right now',
+                            AppStrings.alertsNone,
                             style: TextStyle(
                               color: AppColors.textSecondary,
                             ),
@@ -116,7 +117,7 @@ class AlertsScreen extends StatelessWidget {
                     ConstrainedBox(
                       constraints: BoxConstraints(maxHeight: maxListHeight),
                       child: Semantics(
-                        label: 'Flood alerts',
+                        label: AppStrings.alertsListLabel,
                         container: true,
                         child: ListView.builder(
                           shrinkWrap: true,

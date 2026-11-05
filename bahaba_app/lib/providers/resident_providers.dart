@@ -63,10 +63,10 @@ class BarangayProvider extends ChangeNotifier {
   }
 }
 
-/// Provides published alerts to the resident Alerts and Home screens.
+/// Provides current alerts to the resident Alerts, Home and Map screens.
 ///
-/// Reads approved alerts for the resident's barangay plus "All Barangays"
-/// from Supabase (explicit columns), and re-reads them when the shared
+/// Reads the view active_alerts for the resident's barangay plus "All
+/// Barangays" (explicit columns), and re-reads it when the shared
 /// alerts channel reports a change, so a barangay alert appears at once.
 /// Row-level security hides a withdrawn alert from residents, so Realtime
 /// never delivers that change to them: the list is also re-read every

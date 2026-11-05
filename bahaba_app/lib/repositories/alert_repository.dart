@@ -38,19 +38,20 @@ class AlertRepository {
   /// Explicit columns (never select *).
   static const columns =
       'id, level, title, message, target_barangay, created_by, status, source, '
-      'channels, sent_at, recipients, rejection_reason, withdrawn_reason';
+      'channels, sent_at, recipients, rejection_reason, withdrawn_reason, '
+      'expires_at, is_all_clear';
 
   static String _targetFilter(String barangayName) =>
       'target_barangay.eq."$barangayName",target_barangay.eq."All Barangays"';
 
-  /// Published (approved) alerts for a resident's barangay plus "All
-  /// Barangays", newest first. Withdrawn alerts are hidden by the server.
+  /// Current alerts for a resident's barangay plus "All Barangays", newest
+  /// first. The view active_alerts leaves out withdrawn alerts, alerts past
+  /// their end time and alerts replaced by an all clear.
   Future<List<Alert>> fetchResidentAlerts(String barangayName,
       {int limit = 50}) async {
     final rows = await _client
-        .from('alerts')
+        .from('active_alerts')
         .select(columns)
-        .eq('status', 'approved')
         .or(_targetFilter(barangayName))
         .order('sent_at', ascending: false)
         .limit(limit);
@@ -215,6 +216,8 @@ class AlertRepository {
         rejectionReason: row['rejection_reason'] as String?,
         source: row['source'] as String? ?? 'mdrrmo',
         withdrawnReason: row['withdrawn_reason'] as String?,
+        expiresAt: row['expires_at'] as String?,
+        isAllClear: row['is_all_clear'] == true,
       );
 
   String _now() =>

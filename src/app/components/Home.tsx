@@ -19,6 +19,7 @@ import { asRiskLevel, riskSourceLabel } from "../../lib/floodRisk";
 import { useUnreadAlertCount } from "../../lib/alertsSeen";
 import { ProfileButton } from "./ProfileButton";
 import { BahaCountdownCard } from "./BahaCountdownCard";
+import { GroundReportsCard } from "./GroundReportsCard";
 import {
   displayReporterName,
   reportBelongsToBarangay,
@@ -68,9 +69,9 @@ export function Home() {
   const unreadAlerts = useUnreadAlertCount(userId, profileBarangay);
   const [outlook, setOutlook] = useState<RainOutlook | null>(null);
 
-  // Newest published Orange/Red alert for this barangay (withdrawn alerts drop off).
+  // Newest current Orange/Red alert or all clear for this barangay.
   const { alerts: myAlerts } = useResidentAlerts(profileBarangay);
-  const latestAlert = myAlerts.find((a) => a.level !== "advisory") ?? null;
+  const latestAlert = myAlerts.find((a) => a.is_all_clear || a.level !== "advisory") ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +209,8 @@ export function Home() {
       </div>
 
       {/* Latest report from the resident's barangay */}
+      <GroundReportsCard barangay={profileBarangay} ownBarangay className="mb-6" />
+
       <LatestReportCard barangay={profileBarangay} onOpen={() => navigate("/reports")} />
 
       {/* Latest Orange / Red alert for this barangay (flat, never clay; collapsed by default) */}
@@ -289,7 +292,7 @@ function HeaderCircle({
         {badge > 0 && (
           <span
             aria-hidden="true"
-            className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none text-white"
+            className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-bold leading-none text-white"
             style={{ background: "#C0392B", boxShadow: "0 0 0 2px var(--clay-bg)" }}
           >
             {badge > 99 ? "99+" : badge}
@@ -387,7 +390,7 @@ function LatestReportCard({ barangay, onOpen }: { barangay: string | null; onOpe
 
   const tag = (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold leading-4"
+      className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold leading-4"
       style={{ color: "var(--report-teal)" }}
     >
       <FileText size={12} aria-hidden="true" />
@@ -430,7 +433,7 @@ function LatestReportCard({ barangay, onOpen }: { barangay: string | null; onOpe
         {tag}
         <span className="mt-1 block truncate text-sm font-semibold leading-5">Latest report - {barangay}</span>
         <span className="block truncate text-xs leading-4 opacity-95">{detail}</span>
-        <span className="mt-0.5 flex items-center justify-between gap-2 text-[11px] leading-4 opacity-90">
+        <span className="mt-0.5 flex items-center justify-between gap-2 text-xs leading-4 opacity-90">
           <span className="min-w-0 truncate">{reporter}</span>
           <span className="shrink-0">{when}</span>
         </span>

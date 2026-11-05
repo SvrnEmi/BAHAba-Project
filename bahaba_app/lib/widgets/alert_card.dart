@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_strings.dart';
 import '../models/alert_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/report_display.dart';
 import 'flat_status_card.dart';
 import 'risk_badge.dart';
 
-/// A broadcast alert: flat white card, 4px left border in the PAGASA color.
-/// Never clay. Collapsed by default: PAGASA badge with its label, title,
+/// A broadcast alert: flat white card, 4px left border in the PAGASA color,
+/// or green with an "All clear" label for an all clear. Never clay. Collapsed by default: PAGASA badge with its label, title,
 /// barangay, relative time and a one-line preview. Tapping the header (a
 /// button with an expanded/collapsed state for screen readers) shows the
 /// full message, source and channels.
@@ -41,13 +42,17 @@ class _AlertCardState extends State<AlertCard> {
     final alert = widget.alert;
     final sent = DateTime.tryParse(alert.sentAt);
     final when = sent == null ? alert.sentAt : relativeTime(alert.sentAt);
+    final ended = alert.hasEnded(DateTime.now());
+    final ends = DateTime.tryParse(alert.expiresAt ?? '');
     final preview = alert.message
         .split('\n')
         .map((l) => l.trim())
         .firstWhere((l) => l.isNotEmpty, orElse: () => '');
 
     return FlatStatusCard(
-      accent: AlertLevelBadge.colorFor(alert.level),
+      accent: alert.isAllClear
+          ? AppColors.riskLowFill
+          : AlertLevelBadge.colorFor(alert.level),
       margin: widget.margin,
       padding: EdgeInsets.zero,
       child: Column(
@@ -57,7 +62,7 @@ class _AlertCardState extends State<AlertCard> {
             button: true,
             expanded: _open,
             label:
-                '${alert.level.pagasaText}: ${alert.title}, ${alert.targetBarangay}',
+                '${alert.isAllClear ? AppStrings.alertAllClear : alert.level.pagasaText}: ${alert.title}, ${alert.targetBarangay}',
             hint: _open ? 'Hide details' : 'Show details',
             // The InkWell below is excluded, so the node carries the tap.
             onTap: _toggle,
@@ -79,10 +84,16 @@ class _AlertCardState extends State<AlertCard> {
                               spacing: 6,
                               runSpacing: 4,
                               children: [
-                                AlertLevelBadge(
-                                    level: alert.level, compact: true),
+                                if (alert.isAllClear)
+                                  const _AllClearBadge()
+                                else
+                                  AlertLevelBadge(
+                                      level: alert.level, compact: true),
                                 if (alert.source == 'barangay')
                                   const _SourceChip(label: 'Barangay'),
+                                if (ended)
+                                  const _SourceChip(
+                                      label: AppStrings.alertEnded),
                               ],
                             ),
                             const SizedBox(height: 6),
@@ -168,9 +179,45 @@ class _AlertCardState extends State<AlertCard> {
                         ? alert.sentAt
                         : _formatSent(context, sent),
                   ),
+                  if (ends != null)
+                    _Detail(
+                      label: AppStrings.alertEnds,
+                      value: _formatSent(context, ends),
+                    ),
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Green badge that takes the place of the PAGASA badge on an all clear.
+class _AllClearBadge extends StatelessWidget {
+  const _AllClearBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.riskLowFill,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, size: 13, color: Colors.white),
+          SizedBox(width: 4),
+          Text(
+            AppStrings.alertAllClear,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );
@@ -193,7 +240,7 @@ class _SourceChip extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-            color: AppColors.ink, fontSize: 11, fontWeight: FontWeight.w700),
+            color: AppColors.ink, fontSize: 12, fontWeight: FontWeight.w700),
       ),
     );
   }

@@ -1,14 +1,16 @@
 import { Outlet, useLocation, Link } from "react-router";
-import { Home, Map as MapIcon, Bell, Users } from "lucide-react";
+import { Home, Map as MapIcon, Bell, Phone, Users } from "lucide-react";
+import { STRINGS } from "../../lib/strings";
 
 export function Layout() {
   const location = useLocation();
 
   const navItems = [
-    { path: "/home", label: "Home", icon: Home },
-    { path: "/alerts", label: "Alerts", icon: Bell },
-    { path: "/reports", label: "Reports", icon: Users },
-    { path: "/map", label: "Map", icon: MapIcon },
+    { path: "/home", label: STRINGS.nav.home, icon: Home },
+    { path: "/alerts", label: STRINGS.nav.alerts, icon: Bell },
+    { path: "/reports", label: STRINGS.nav.reports, icon: Users },
+    { path: "/map", label: STRINGS.nav.map, icon: MapIcon },
+    { path: "/contacts", label: STRINGS.nav.contacts, icon: Phone },
   ];
 
   return (
@@ -18,7 +20,7 @@ export function Layout() {
       </main>
 
       {/* Bottom Navigation: clay bar of 48px circles; selected sits in a pressed-in well. */}
-      <nav aria-label="Main" className="px-[22px] pt-1 pb-[22px]">
+      <nav aria-label="Main" className="px-3 pt-1 pb-[22px] min-[360px]:px-[22px]">
         <div className="clay flex items-center justify-around px-2.5 py-2" style={{ borderRadius: 28 }}>
           {navItems.map((item) => {
             const Icon = item.icon;

@@ -8,13 +8,14 @@ import '../../models/alert_model.dart';
 import '../../models/community_report_model.dart';
 import '../../providers/app_state.dart';
 import '../../providers/resident_providers.dart';
-import '../../repositories/alert_repository.dart';
 import '../../repositories/barangay_repository.dart';
 import '../../repositories/report_repository.dart';
 import '../../services/alerts_seen_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/report_display.dart';
+import '../../config/app_strings.dart';
 import '../../widgets/alert_card.dart';
+import '../../widgets/ground_reports_card.dart';
 import '../rainfall_info_screen.dart';
 import '../../widgets/baha_countdown_card.dart';
 import '../../widgets/info_tip.dart';
@@ -118,6 +119,9 @@ class HomeScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 24),
+            GroundReportsCard(barangay: residentBarangay, ownBarangay: true),
+
+            const SizedBox(height: 24),
             // Latest report from the resident's barangay
             _LatestReportCard(
               barangay: residentBarangay,
@@ -195,7 +199,7 @@ class _HeaderCircle extends StatelessWidget {
                       badge > 99 ? '99+' : '$badge',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         height: 1,
                       ),
@@ -210,9 +214,9 @@ class _HeaderCircle extends StatelessWidget {
   }
 }
 
-/// Header bell with a live unread count: approved alerts for this barangay
-/// (or all barangays) sent after the user last opened Alerts. Uses the
-/// shared alerts channel, so no extra Realtime connection is opened.
+/// Header bell with a live unread count: current alerts for this barangay
+/// (or all barangays) sent after the user last opened Alerts. Counts the same
+/// list the Alerts screen shows, so it never counts an ended alert.
 class _AlertsBell extends StatefulWidget {
   final String? barangay;
   final VoidCallback onTap;
@@ -224,8 +228,6 @@ class _AlertsBell extends StatefulWidget {
 }
 
 class _AlertsBellState extends State<_AlertsBell> {
-  StreamSubscription<List<Alert>>? _sub;
-  List<Alert> _alerts = const [];
   DateTime? _lastSeen;
   int _loadGeneration = 0;
 
@@ -234,18 +236,11 @@ class _AlertsBellState extends State<_AlertsBell> {
     super.initState();
     AlertsSeenStore.instance.addListener(_loadLastSeen);
     _loadLastSeen();
-    _sub = AlertRepository().watchAll().listen(
-      (alerts) {
-        if (mounted) setState(() => _alerts = alerts);
-      },
-      onError: (Object error) => debugPrint('Unread alerts stream: $error'),
-    );
   }
 
   @override
   void dispose() {
     AlertsSeenStore.instance.removeListener(_loadLastSeen);
-    _sub?.cancel();
     super.dispose();
   }
 
@@ -260,12 +255,11 @@ class _AlertsBellState extends State<_AlertsBell> {
     setState(() => _lastSeen = lastSeen);
   }
 
-  int get _unread {
+  int _unread(List<Alert> alerts) {
     final barangay = widget.barangay;
     final lastSeen = _lastSeen;
     if (barangay == null || barangay.isEmpty || lastSeen == null) return 0;
-    return _alerts.where((alert) {
-      if (alert.status != AlertStatus.approved) return false;
+    return alerts.where((alert) {
       if (!AlertsSeenStore.targetsBarangay(alert.targetBarangay, barangay)) {
         return false;
       }
@@ -276,7 +270,7 @@ class _AlertsBellState extends State<_AlertsBell> {
 
   @override
   Widget build(BuildContext context) {
-    final unread = _unread;
+    final unread = _unread(context.watch<AlertProvider>().alerts);
     return _HeaderCircle(
       icon: Icons.notifications_outlined,
       label: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
@@ -374,7 +368,7 @@ class _LatestReportCardState extends State<_LatestReportCard> {
             'Reports',
             style: TextStyle(
               color: AppColors.reportTeal,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               height: 1.3,
             ),
@@ -467,14 +461,14 @@ class _LatestReportCardState extends State<_LatestReportCard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              color: white, fontSize: 11, height: 1.3),
+                              color: white, fontSize: 12, height: 1.3),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         when,
                         style: const TextStyle(
-                            color: white, fontSize: 11, height: 1.3),
+                            color: white, fontSize: 12, height: 1.3),
                       ),
                     ],
                   ),
@@ -490,7 +484,7 @@ class _LatestReportCardState extends State<_LatestReportCard> {
   }
 }
 
-/// Most recent critical or warning alert, as a flat [AlertCard].
+/// Most recent critical or warning alert or all clear, as a flat [AlertCard].
 class _LatestAlert extends StatelessWidget {
   const _LatestAlert();
 
@@ -499,7 +493,8 @@ class _LatestAlert extends StatelessWidget {
     final alerts = context.watch<AlertProvider>().alerts;
     Alert? latest;
     for (final alert in alerts) {
-      if (alert.level == AlertLevel.critical ||
+      if (alert.isAllClear ||
+          alert.level == AlertLevel.critical ||
           alert.level == AlertLevel.warning) {
         latest = alert;
         break;
@@ -510,7 +505,7 @@ class _LatestAlert extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Latest alert', style: AppText.heading(size: 16)),
+        Text(AppStrings.alertLatest, style: AppText.heading(size: 16)),
         const SizedBox(height: 10),
         AlertCard(alert: latest, showDetails: false),
       ],

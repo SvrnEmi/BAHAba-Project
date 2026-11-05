@@ -38,10 +38,11 @@ class ClayBottomNav extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
+        // Five 48px buttons still fit a 320px-wide phone.
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 22),
         child: ClayContainer(
           borderRadius: 28,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [

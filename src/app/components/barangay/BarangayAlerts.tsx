@@ -1,16 +1,24 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { ChevronRight, Loader, Send, Undo2 } from "lucide-react";
+import { CheckCircle, ChevronRight, Loader, Send, Undo2, X } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import { ALERT_TEMPLATES, errorMessage, fillTemplate } from "../../../lib/barangayAdmin";
+import { ALERT_TEMPLATES, errorMessage, fillTemplate, formatManilaDateTime } from "../../../lib/barangayAdmin";
 import {
   ALERT_COLUMNS,
+  ALERT_END_OPTIONS,
   ALERT_REJECT_REASONS,
   PAGASA_LEVEL_OPTIONS,
+  alertEndIso,
+  alertEndProblem,
+  alertLifecycle,
+  allClearMessage,
+  allClearTitle,
   isLimitError,
   pagasaText,
   toAlertRow,
+  useActiveAlertIds,
   withdrawAlert,
+  type AlertEnd,
   type AlertLevel,
   type AlertRow,
 } from "../../../lib/alerts";
@@ -19,8 +27,10 @@ import { ReasonDialog } from "../ReasonDialog";
 
 /*
  * Alerts for the admin's own barangay. Publishing is immediate: the server
- * sets target_barangay, source, status and created_by, so the insert only
- * sends level, title, message and channels. The server limits each
+ * sets target_barangay, source, status, created_by, recipients and sent_at,
+ * so the insert only sends level, title, message, channels, expires_at and
+ * is_all_clear. An all clear ends every older alert for the barangay, from any
+ * source, in the active_alerts view. The server limits each
  * barangay to 5 alerts per hour (error text starts with "Limit reached").
  * A published alert can be withdrawn with a reason (min 3 characters).
  */
@@ -29,7 +39,7 @@ export type BarangayAlertRow = AlertRow;
 export { ALERT_COLUMNS };
 export const toAlert = toAlertRow;
 
-type Draft = { level: AlertLevel; title: string; message: string };
+type Draft = { level: AlertLevel; title: string; message: string; end: AlertEnd; customEnd: string; isAllClear: boolean };
 
 export function BarangayAlertsSection({
   barangay,
@@ -54,6 +64,10 @@ export function BarangayAlertsSection({
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [template, setTemplate] = useState("");
+  const [end, setEnd] = useState<AlertEnd>("none");
+  const [customEnd, setCustomEnd] = useState("");
+  const [isAllClear, setIsAllClear] = useState(false);
+  const activeIds = useActiveAlertIds(barangay, [...published, ...otherAlerts]);
   const [confirming, setConfirming] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -63,8 +77,31 @@ export function BarangayAlertsSection({
     setTemplate(id);
     const t = ALERT_TEMPLATES.find((x) => x.id === id);
     if (!t) return;
+    // A template is a warning, so it must not go out flagged as an all clear.
+    setIsAllClear(false);
     setLevel(t.level);
     setMessage(fillTemplate(t.text, barangay));
+    setResult(null);
+  };
+
+  const resetForm = () => {
+    setTitle("");
+    setMessage("");
+    setTemplate("");
+    setLevel("advisory");
+    setEnd("none");
+    setCustomEnd("");
+    setIsAllClear(false);
+  };
+
+  const startAllClear = () => {
+    setIsAllClear(true);
+    setTemplate("");
+    setLevel("advisory");
+    setTitle(allClearTitle(barangay));
+    setMessage(allClearMessage(barangay));
+    setEnd("12");
+    setCustomEnd("");
     setResult(null);
   };
 
@@ -73,8 +110,13 @@ export function BarangayAlertsSection({
       setResult({ kind: "error", text: "Please enter a title and a message." });
       return;
     }
+    const problem = alertEndProblem(end, customEnd);
+    if (problem) {
+      setResult({ kind: "error", text: problem });
+      return;
+    }
     setResult(null);
-    setConfirming({ level, title: title.trim(), message: message.trim() });
+    setConfirming({ level, title: title.trim(), message: message.trim(), end, customEnd, isAllClear });
   };
 
   const publish = async () => {
@@ -84,15 +126,20 @@ export function BarangayAlertsSection({
     try {
       const { data, error: insertError } = await supabase
         .from("alerts")
-        .insert({ level: confirming.level, title: confirming.title, message: confirming.message, channels: "push" })
+        .insert({
+          level: confirming.level,
+          title: confirming.title,
+          message: confirming.message,
+          channels: "push",
+          // Counted from now, so time spent on the confirm dialog is not lost.
+          expires_at: alertEndIso(confirming.end, confirming.customEnd),
+          is_all_clear: confirming.isAllClear,
+        })
         .select(ALERT_COLUMNS)
         .single();
       if (insertError) throw insertError;
       if (data) onChanged(toAlertRow(data as Record<string, unknown>));
-      setTitle("");
-      setMessage("");
-      setTemplate("");
-      setLevel("advisory");
+      resetForm();
       setResult({ kind: "ok", text: `Published. Residents of ${barangay} are being notified.` });
     } catch (err) {
       const text = errorMessage(err, "Unable to publish the alert.");
@@ -120,6 +167,18 @@ export function BarangayAlertsSection({
             Alerts go straight to residents of {barangay} as a push notification. Up to 5 alerts per hour.
           </p>
         </div>
+        {isAllClear ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 text-sm" style={{ color: "var(--text-primary)", borderLeft: "4px solid var(--risk-low)" }}>
+            <span>This is an all clear. Earlier alerts for {barangay} will show as Cleared.</span>
+            <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={resetForm} disabled={saving}>
+              <X size={16} aria-hidden="true" /> Cancel all clear
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={startAllClear} disabled={saving}>
+            <CheckCircle size={16} aria-hidden="true" /> All clear
+          </button>
+        )}
         <label className="block">
           <span className="clay-label">For</span>
           <input className="clay-input opacity-70" value={barangay} readOnly aria-readonly="true" />
@@ -127,7 +186,7 @@ export function BarangayAlertsSection({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="clay-label">PAGASA level</span>
-            <select className="clay-input" value={level} onChange={(e) => setLevel(e.target.value as AlertLevel)} disabled={saving}>
+            <select className="clay-input" value={level} onChange={(e) => setLevel(e.target.value as AlertLevel)} disabled={saving || isAllClear}>
               {PAGASA_LEVEL_OPTIONS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
           </label>
@@ -147,6 +206,20 @@ export function BarangayAlertsSection({
           <span className="clay-label">Message</span>
           <textarea className="clay-input min-h-28" value={message} maxLength={1000} onChange={(e) => setMessage(e.target.value)} placeholder="Message for residents..." disabled={saving} />
         </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="clay-label">Alert ends</span>
+            <select className="clay-input" value={end} onChange={(e) => setEnd(e.target.value as AlertEnd)} disabled={saving}>
+              {ALERT_END_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          {end === "custom" && (
+            <label className="block">
+              <span className="clay-label">End date and time</span>
+              <input className="clay-input" type="datetime-local" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} disabled={saving} />
+            </label>
+          )}
+        </div>
         {result && (
           <p
             role={result.kind === "error" ? "alert" : "status"}
@@ -188,6 +261,7 @@ export function BarangayAlertsSection({
                   alert={a}
                   now={now}
                   showStatus
+                  lifecycle={alertLifecycle(a, activeIds, now)}
                   actions={
                     a.status === "approved" ? (
                       <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={() => setWithdrawing(a)}>
@@ -208,7 +282,7 @@ export function BarangayAlertsSection({
           <AlertScrollList label="MDRRMO and automatic alerts">
             {otherAlerts.map((a) => (
               <li key={a.id}>
-                <CollapsibleAlertCard id={`alert-${a.id}`} alert={a} now={now} showStatus />
+                <CollapsibleAlertCard id={`alert-${a.id}`} alert={a} now={now} showStatus lifecycle={alertLifecycle(a, activeIds, now)} />
               </li>
             ))}
           </AlertScrollList>
@@ -245,6 +319,12 @@ export function BarangayAlertsSection({
   );
 }
 
+function endText(draft: Draft): string {
+  if (draft.end === "custom") return formatManilaDateTime(new Date(draft.customEnd).toISOString());
+  const option = ALERT_END_OPTIONS.find((o) => o.value === draft.end);
+  return draft.end === "none" ? "Until withdrawn" : `${option?.label} after publishing`;
+}
+
 function ConfirmPublish({
   barangay,
   draft,
@@ -270,6 +350,14 @@ function ConfirmPublish({
           <p className="font-semibold" style={{ color: "var(--text-primary)" }}>[{pagasaText(draft.level)}] {draft.title}</p>
           <p className="line-clamp-3 font-normal" style={{ color: "var(--text-secondary)" }}>{draft.message}</p>
         </div>
+        <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+          <span className="font-semibold">Ends:</span> {endText(draft)}
+        </p>
+        {draft.isAllClear && (
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            Every earlier alert for {barangay}, including MDRRMO and automatic warnings, will show as Cleared.
+          </p>
+        )}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="clay-btn clay-btn-secondary" onClick={onCancel} disabled={saving} autoFocus>Cancel</button>
           <button type="button" className="clay-btn clay-btn-primary" onClick={onConfirm} disabled={saving}>

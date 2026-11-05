@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Users,
   Bell,
@@ -27,18 +27,28 @@ import { QuickReportsPanel, useQuickReportPendingCount } from "./QuickReportsPan
 import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type FeedAlert, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
 import { NewDot, ReportMessages } from "./ReportMessages";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../lib/reportMessages";
-import { ADMIN_TABS, MDRRMO_DEFAULT_TAB, type AdminTabId } from "../../lib/adminNav";
+import { ADMIN_TABS, MDRRMO_DEFAULT_TAB, MDRRMO_OTHER_TABS, type AdminTabId, type MdrrmoTabId } from "../../lib/adminNav";
 import { writeAuditLog } from "../../lib/audit";
 import { displayReporterName, waterLevelLabel } from "../../lib/reports";
-import { formatManilaDateTime } from "../../lib/barangayAdmin";
+import { errorMessage, formatManilaDateTime } from "../../lib/barangayAdmin";
 import { useBarangayNames } from "../../lib/barangays";
 import {
   ALERT_COLUMNS,
+  ALERT_END_OPTIONS,
+  ALL_BARANGAYS,
+  EVERY_TARGET,
   PAGASA,
   PAGASA_LEVEL_OPTIONS,
+  alertEndIso,
+  alertEndProblem,
+  alertLifecycle,
   alertPreviewText,
+  allClearMessage,
+  allClearTitle,
   pagasaText,
   toAlertRow,
+  useActiveAlertIds,
+  type AlertEnd,
   type AlertLevel,
   type AlertRow,
 } from "../../lib/alerts";
@@ -46,6 +56,8 @@ import { AlertScrollList, CollapsibleAlertCard, DisclosureCard } from "./alerts/
 import { BarangayBroadcastBox, useMdrrmoAlertActions } from "./alerts/MdrrmoAlertActions";
 import { InfoTip } from "./InfoTip";
 import { MdrrmoAnalytics } from "./MdrrmoAnalytics";
+import { MdrrmoContacts } from "./MdrrmoContacts";
+import { MdrrmoObservations } from "./MdrrmoObservations";
 import { ReportPager, ReportSearchControls } from "./ReportSearchControls";
 import {
   REPORT_PAGE_SIZE,
@@ -106,12 +118,13 @@ export function MDRRMOAdminDashboard() {
   const [headerHeight, setHeaderHeight] = useState(96);
   // Element to scroll to (and flash) after a Recent updates item switches tabs.
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTabId>(MDRRMO_DEFAULT_TAB);
+  const [activeTab, setActiveTab] = useState<MdrrmoTabId>(MDRRMO_DEFAULT_TAB);
   const [showNotification, setShowNotification] = useState(false);
   const [pendingReviewSummary, setPendingReviewSummary] = useState<{ pendingReportsCount: number } | null>(null);
   const [reviewToasts, setReviewToasts] = useState<ReviewToast[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
+  const activeIds = useActiveAlertIds(EVERY_TARGET, alerts);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
@@ -378,6 +391,46 @@ export function MDRRMOAdminDashboard() {
   const [allBarangays, setAllBarangays] = useState(true);
   const [targetBarangayError, setTargetBarangayError] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [alertEnd, setAlertEnd] = useState<AlertEnd>("none");
+  const [customEnd, setCustomEnd] = useState("");
+  const [allClear, setAllClear] = useState(false);
+  const [allClearText, setAllClearText] = useState("");
+  const [allClearEdited, setAllClearEdited] = useState(false);
+  const [alertFormError, setAlertFormError] = useState("");
+
+  // An all clear goes to one place, so its text can name it.
+  const singleTarget = allBarangays ? ALL_BARANGAYS : selectedBarangays.length === 1 ? selectedBarangays[0] : null;
+
+  // Follow the chosen target until the admin edits the text.
+  useEffect(() => {
+    if (!allClear || allClearEdited || !singleTarget) return;
+    setAllClearText(allClearTitle(singleTarget));
+    setNewAlert({ level: "advisory", message: allClearMessage(singleTarget) });
+  }, [allClear, allClearEdited, singleTarget]);
+
+  const resetAlertForm = () => {
+    setNewAlert({ level: "warning", message: "" });
+    setSelectedBarangays([]);
+    setAllBarangays(true);
+    setSelectedTemplate(null);
+    setAlertEnd("none");
+    setCustomEnd("");
+    setAllClear(false);
+    setAllClearText("");
+    setAllClearEdited(false);
+    setAlertFormError("");
+  };
+
+  const startAllClear = () => {
+    const target = singleTarget ?? ALL_BARANGAYS;
+    setAllClear(true);
+    setAllClearEdited(false);
+    setAllClearText(allClearTitle(target));
+    setNewAlert({ level: "advisory", message: allClearMessage(target) });
+    setAlertEnd("12");
+    setCustomEnd("");
+    setAlertFormError("");
+  };
 
   const barangays = useBarangayNames();
   const messageTemplates = [
@@ -408,6 +461,7 @@ export function MDRRMOAdminDashboard() {
   ];
 
   const handleSendAlert = async () => {
+    setAlertFormError("");
     if (!newAlert.message.trim()) {
       alert("Please enter an alert message");
       return;
@@ -419,8 +473,29 @@ export function MDRRMOAdminDashboard() {
     }
     setTargetBarangayError("");
 
-    const targets = allBarangays ? ["All Barangays"] : selectedBarangays;
-    const title = `${pagasaText(newAlert.level)} Alert`;
+    // The database only checks this for barangay officials, so it is enforced here.
+    const endProblem = alertEndProblem(alertEnd, customEnd);
+    if (endProblem) {
+      setAlertFormError(endProblem);
+      return;
+    }
+    if (allClear && !singleTarget) {
+      setTargetBarangayError("An all clear goes to one barangay or All Barangays.");
+      return;
+    }
+    if (allClear && !allClearText.trim()) {
+      setAlertFormError("Please enter a title.");
+      return;
+    }
+    if (allClear) {
+      const scope = singleTarget === ALL_BARANGAYS ? "every barangay" : singleTarget;
+      if (!window.confirm(`Send this all clear to ${singleTarget}? Every earlier alert for ${scope}, from any source, will show as Cleared.`)) return;
+    }
+
+    const targets = allBarangays ? [ALL_BARANGAYS] : selectedBarangays;
+    const title = allClear ? allClearText.trim() : `${pagasaText(newAlert.level)} Alert`;
+    const expiresAt = alertEndIso(alertEnd, customEnd);
+    const auditDetails = `Created ${allClear ? "all clear" : `${pagasaText(newAlert.level)} alert`} for ${targets.join(", ")} via push`;
 
     const insertResults = await Promise.allSettled(targets.map(async (targetBarangay) => {
       const { data: insertedAlert, error } = await supabase.from("alerts").insert({
@@ -434,6 +509,8 @@ export function MDRRMOAdminDashboard() {
         created_by: adminEmail,
         status: "approved",
         source: "mdrrmo",
+        expires_at: expiresAt,
+        is_all_clear: allClear,
       }).select(ALERT_COLUMNS).single();
 
       if (error || !insertedAlert) {
@@ -446,7 +523,7 @@ export function MDRRMOAdminDashboard() {
       .filter((result): result is PromiseFulfilledResult<AlertRow> => result.status === "fulfilled")
       .map((result) => result.value);
     const failedBarangays = insertResults
-      .map((result, index) => result.status === "rejected" ? targets[index] : null)
+      .map((result, index) => result.status === "rejected" ? `${targets[index]} (${errorMessage(result.reason, "unknown error")})` : null)
       .filter((target): target is string => target !== null);
 
     successfulAlerts.forEach(upsertAlert);
@@ -456,24 +533,20 @@ export function MDRRMOAdminDashboard() {
       return;
     }
 
-    void writeAuditLog("ALERT_CREATED", adminEmail, `Created ${pagasaText(newAlert.level)} alert for ${targets.join(", ")} via push`);
+    void writeAuditLog("ALERT_CREATED", adminEmail, auditDetails);
     setAuditLogs((current) => [{
       id: Date.now(),
       action: "ALERT_CREATED",
       user: adminEmail,
       timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      details: `Created ${pagasaText(newAlert.level)} alert for ${targets.join(", ")} via push`,
+      details: auditDetails,
     }, ...current]);
 
     // Show success notification
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 5000);
 
-    // Reset form
-    setNewAlert({ level: "warning", message: "" });
-    setSelectedBarangays([]);
-    setAllBarangays(true);
-    setSelectedTemplate(null);
+    resetAlertForm();
   };
 
   /** Approve (approval_reason) or reject (rejection_reason); logged for the review-time analytics. */
@@ -669,18 +742,23 @@ export function MDRRMOAdminDashboard() {
         </div>
 
         {/* Barangay-published alerts: collapsed by default so reports stay the main focus. */}
-        <BarangayBroadcastBox alerts={alerts} now={now} adminEmail={adminEmail} onChanged={upsertAlert} onDeleted={dropAlert} />
+        <BarangayBroadcastBox alerts={alerts} activeIds={activeIds} now={now} adminEmail={adminEmail} onChanged={upsertAlert} onDeleted={dropAlert} />
 
         {/* Tabs */}
         <div id="mdrrmo-tabs" className="bg-white border border-border rounded-xl mb-6" style={{ scrollMarginTop: headerHeight + 16 }}>
           <div className="border-b border-gray-200 px-4 py-3">
             <div className="flex gap-2 overflow-x-auto" role="tablist">
-              {ADMIN_TABS.map((tab) => {
+              {[...ADMIN_TABS, ...MDRRMO_OTHER_TABS].map((tab) => {
                 const TabIcon = tab.icon;
                 const badge = tab.id === "reports" ? pendingReports.length : tab.id === "quick-reports" ? quickReportsPending : null;
                 return (
+                  <Fragment key={tab.id}>
+                  {tab.id === MDRRMO_OTHER_TABS[0].id && (
+                    <span role="presentation" className="flex shrink-0 items-center border-l border-gray-300 pl-3 text-xs font-bold uppercase" style={{ color: "var(--text-secondary)" }}>
+                      Other
+                    </span>
+                  )}
                   <button
-                    key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     role="tab"
                     aria-selected={activeTab === tab.id}
@@ -695,6 +773,7 @@ export function MDRRMOAdminDashboard() {
                       </span>
                     ) : null}
                   </button>
+                  </Fragment>
                 );
               })}
             </div>
@@ -703,6 +782,8 @@ export function MDRRMOAdminDashboard() {
           <div className="p-4 sm:p-6">
             {activeTab === "quick-reports" && <QuickReportsPanel />}
             {activeTab === "flood-events" && <FloodEventsPanel />}
+            {activeTab === "emergency-contacts" && <MdrrmoContacts />}
+            {activeTab === "field-observations" && <MdrrmoObservations now={now} />}
 
             {/* Overview Tab: summary, then analytics, then the forecast */}
             {activeTab === "overview" && (
@@ -763,19 +844,32 @@ export function MDRRMOAdminDashboard() {
                   <h2 className="text-lg font-bold mb-6">Create Alert</h2>
 
                   <div className="space-y-5">
+                    {allClear ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 text-sm" style={{ color: "var(--text-primary)", borderLeft: "4px solid var(--risk-low)" }}>
+                        <span>This is an all clear. Earlier alerts for the target will show as Cleared.</span>
+                        <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={resetAlertForm}>
+                          <XCircle size={16} aria-hidden="true" /> Cancel all clear
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" className="clay-btn clay-btn-secondary text-sm" onClick={startAllClear}>
+                        <CheckCircle size={16} aria-hidden="true" /> All clear
+                      </button>
+                    )}
                     {/* PAGASA level */}
                     <label className="block">
                       <span className="block text-sm font-semibold text-gray-700 mb-2">PAGASA alert level *</span>
                       <select
                         className="clay-input"
                         value={newAlert.level}
+                        disabled={allClear}
                         onChange={(e) => setNewAlert({ ...newAlert, level: e.target.value as AlertLevel })}
                       >
                         {PAGASA_LEVEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                       <span className="mt-2 inline-flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
                         <span className={`risk-badge is-compact ${PAGASA[newAlert.level].badge}`}>{pagasaText(newAlert.level)}</span>
-                        Push preview: [{pagasaText(newAlert.level)}] {pagasaText(newAlert.level)} Alert
+                        Push preview: [{pagasaText(newAlert.level)}] {allClear ? allClearText : `${pagasaText(newAlert.level)} Alert`}
                       </span>
                     </label>
 
@@ -838,6 +932,12 @@ export function MDRRMOAdminDashboard() {
                               checked={selectedTemplate === template.id}
                               onChange={() => {
                                 setSelectedTemplate(template.id);
+                                if (template.id === "all-clear") {
+                                  // Only the all-clear path sets is_all_clear, which is what ends earlier alerts.
+                                  startAllClear();
+                                  return;
+                                }
+                                setAllClear(false);
                                 setNewAlert({ level: template.level ?? newAlert.level, message: template.message });
                               }}
                               className="w-5 h-5 mt-0.5"
@@ -846,11 +946,28 @@ export function MDRRMOAdminDashboard() {
                           </label>
                         ))}
                       </div>
+                      {allClear && (
+                        <label className="mb-4 block">
+                          <span className="block text-sm font-semibold text-gray-700 mb-2">Title *</span>
+                          <input
+                            className="clay-input"
+                            value={allClearText}
+                            maxLength={120}
+                            onChange={(e) => {
+                              setAllClearEdited(true);
+                              setAllClearText(e.target.value);
+                            }}
+                          />
+                        </label>
+                      )}
                       <label className="block">
                         <span className="block text-sm font-semibold text-gray-700 mb-2">Alert Message *</span>
                         <textarea
                           value={newAlert.message}
-                          onChange={(e) => setNewAlert({ ...newAlert, message: e.target.value })}
+                          onChange={(e) => {
+                            setAllClearEdited(true);
+                            setNewAlert({ ...newAlert, message: e.target.value });
+                          }}
                           placeholder="Enter detailed alert message for residents..."
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                           rows={4}
@@ -860,6 +977,23 @@ export function MDRRMOAdminDashboard() {
                         Clear and actionable instructions. Avoid jargon.
                       </p>
                     </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="block text-sm font-semibold text-gray-700 mb-2">Alert ends</span>
+                        <select className="clay-input" value={alertEnd} onChange={(e) => setAlertEnd(e.target.value as AlertEnd)}>
+                          {ALERT_END_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </label>
+                      {alertEnd === "custom" && (
+                        <label className="block">
+                          <span className="block text-sm font-semibold text-gray-700 mb-2">End date and time</span>
+                          <input className="clay-input" type="datetime-local" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+                        </label>
+                      )}
+                    </div>
+
+                    {alertFormError && <p role="alert" className="text-sm text-red-600">{alertFormError}</p>}
 
                     <button
                       type="button"
@@ -887,7 +1021,7 @@ export function MDRRMOAdminDashboard() {
                     <AlertScrollList label="Alert history">
                       {alerts.slice(0, 100).map((alert) => (
                         <li key={alert.id}>
-                          <CollapsibleAlertCard id={`alert-history-${alert.id}`} alert={alert} now={now} showStatus actions={alertActions(alert)} />
+                          <CollapsibleAlertCard id={`alert-history-${alert.id}`} alert={alert} now={now} showStatus lifecycle={alertLifecycle(alert, activeIds, now)} actions={alertActions(alert)} />
                         </li>
                       ))}
                     </AlertScrollList>

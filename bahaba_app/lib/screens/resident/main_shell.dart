@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../config/app_strings.dart';
 import '../../providers/app_state.dart';
 import '../../providers/resident_providers.dart';
 import '../../services/alerts_seen_store.dart';
 import '../../services/app_update_service.dart';
 import '../../services/push_notification_service.dart';
 import '../../widgets/clay_bottom_nav.dart';
+import '../emergency_contacts_screen.dart';
 import 'home_screen.dart';
 import 'hazard_map_screen.dart';
 import 'alerts_screen.dart';
@@ -34,12 +36,13 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
-  // Order matches the nav items below: Home, Alerts, Reports, Map.
+  // Order matches the nav items below: Home, Alerts, Reports, Map, Contacts.
   final _screens = const [
     HomeScreen(),
     AlertsScreen(),
     CommunityReportsScreen(),
     HazardMapScreen(),
+    EmergencyContactsScreen(),
   ];
 
   // Held so dispose() can stop their live subscriptions without a context.
@@ -117,22 +120,27 @@ class _MainShellState extends State<MainShell> {
           ClayNavItem(
             icon: Icons.home_outlined,
             selectedIcon: Icons.home,
-            label: 'Home',
+            label: AppStrings.navHome,
           ),
           ClayNavItem(
             icon: Icons.notifications_outlined,
             selectedIcon: Icons.notifications,
-            label: 'Alerts',
+            label: AppStrings.navAlerts,
           ),
           ClayNavItem(
             icon: Icons.description_outlined,
             selectedIcon: Icons.description,
-            label: 'Reports',
+            label: AppStrings.navReports,
           ),
           ClayNavItem(
             icon: Icons.map_outlined,
             selectedIcon: Icons.map,
-            label: 'Map',
+            label: AppStrings.navMap,
+          ),
+          ClayNavItem(
+            icon: Icons.phone_outlined,
+            selectedIcon: Icons.phone,
+            label: AppStrings.navContacts,
           ),
         ],
       ),

@@ -5,19 +5,21 @@ import { ALERT_COLUMNS, toAlertRow, type AlertRow } from "./alerts";
 import { alertTargetsBarangay } from "./alertsSeen";
 
 /*
- * Published alerts for one resident: status approved, targeted at their
- * barangay or "All Barangays". Live through the shared alerts channel.
+ * Current alerts for one resident, from the view active_alerts: published,
+ * not past their end time, not replaced by an all clear, and targeted at their
+ * barangay or "All Barangays".
  *
- * Row-level security hides an alert from residents as soon as it is
- * withdrawn, so Realtime never delivers that UPDATE to them. The list is
- * therefore also re-read when the tab becomes visible again and once a
- * minute while it is visible, so withdrawn alerts drop off within a minute.
+ * What is current depends on other rows and on the clock, so a change on the
+ * shared alerts channel re-reads the view instead of patching the list.
+ * Row-level security also hides a withdrawn alert from residents, so Realtime
+ * never delivers that UPDATE to them. The list is therefore also re-read when
+ * the tab becomes visible again and once a minute while it is visible, so
+ * ended and withdrawn alerts drop off within a minute.
  */
 
 const LIST_LIMIT = 50;
 const REFRESH_MS = 60_000;
-
-const byNewest = (a: AlertRow, b: AlertRow) => (b.sent_at ?? "").localeCompare(a.sent_at ?? "");
+const CHANGE_DELAY_MS = 300;
 
 export function useResidentBarangay(userId: string | null): string | null {
   const [barangay, setBarangay] = useState<string | null>(null);
@@ -49,13 +51,12 @@ export function useResidentAlerts(barangay: string | null) {
   useEffect(() => {
     if (barangay === null) return;
     let cancelled = false;
-    const relevant = (a: AlertRow) => a.status === "approved" && (alertTargetsBarangay(a.target_barangay, barangay) || a.target_barangay === "All Barangays");
+    const relevant = (a: AlertRow) => alertTargetsBarangay(a.target_barangay, barangay) || a.target_barangay === "All Barangays";
 
     const load = async () => {
       const { data, error: readError } = await supabase
-        .from("alerts")
+        .from("active_alerts")
         .select(ALERT_COLUMNS)
-        .eq("status", "approved")
         .or(`target_barangay.eq."${barangay}",target_barangay.eq."All Barangays"`)
         .order("sent_at", { ascending: false })
         .limit(LIST_LIMIT);
@@ -69,18 +70,11 @@ export function useResidentAlerts(barangay: string | null) {
     };
     void load();
 
-    const unsubscribe = subscribeToTable("alerts", (change) => {
+    let changeTimer: number | undefined;
+    const unsubscribe = subscribeToTable("alerts", () => {
       if (cancelled) return;
-      if (change.eventType === "DELETE") {
-        const id = Number((change.old as { id?: unknown }).id);
-        setAlerts((current) => current.filter((a) => a.id !== id));
-        return;
-      }
-      const row = toAlertRow(change.new as Record<string, unknown>);
-      setAlerts((current) => {
-        const rest = current.filter((a) => a.id !== row.id);
-        return relevant(row) ? [row, ...rest].sort(byNewest) : rest;
-      });
+      window.clearTimeout(changeTimer);
+      changeTimer = window.setTimeout(() => void load(), CHANGE_DELAY_MS);
     });
 
     const refreshIfVisible = () => {
@@ -92,6 +86,7 @@ export function useResidentAlerts(barangay: string | null) {
     return () => {
       cancelled = true;
       unsubscribe();
+      window.clearTimeout(changeTimer);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };

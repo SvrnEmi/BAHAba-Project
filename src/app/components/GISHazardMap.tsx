@@ -8,6 +8,10 @@ import { supabase } from "../../lib/supabase";
 import { subscribeToTable } from "../../lib/realtime";
 import { asRiskLevel, riskSourceLabel } from "../../lib/floodRisk";
 import { formatManilaDateTime } from "../../lib/barangayAdmin";
+import { useAuth } from "../../lib/auth";
+import { useResidentAlerts, useResidentBarangay } from "../../lib/residentAlerts";
+import { MapAlertBanner } from "./alerts/MapAlertBanner";
+import { GroundReportsCard } from "./GroundReportsCard";
 
 type RiskZone = {
   id: number;
@@ -57,6 +61,9 @@ function toZone(row: BarangayRow): RiskZone | null {
 }
 
 export function GISHazardMap() {
+  const { session } = useAuth();
+  const residentBarangay = useResidentBarangay(session?.user.id ?? null);
+  const { alerts: currentAlerts } = useResidentAlerts(residentBarangay);
   const [offlineMode, setOfflineMode] = useState(false);
   const [showLegend, setShowLegend] = useState(true);
   const [selectedZone, setSelectedBarangay] = useState<RiskZone | null>(null);
@@ -163,6 +170,8 @@ export function GISHazardMap() {
             )}
           </button>
       </div>
+
+      <MapAlertBanner alerts={currentAlerts} />
 
       {/* Past floods from verified reports */}
       <div className="px-[18px] mb-3">
@@ -367,6 +376,8 @@ export function GISHazardMap() {
                 </div>
                 <p className="text-lg font-bold">{formatManilaDateTime(selectedBarangay.lastUpdate)}</p>
               </ClayCard>
+
+              <GroundReportsCard barangay={selectedBarangay.name} ownBarangay={selectedBarangay.name === residentBarangay} />
 
               {/* GPS Coordinates */}
               <div>

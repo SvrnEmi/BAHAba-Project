@@ -10,6 +10,8 @@ import { errorMessage, notifyBrowser, toTime } from "../../lib/barangayAdmin";
 import { BARANGAY_TABS, type BarangayTabId } from "../../lib/adminNav";
 import { STATUS_LABELS, pagasaText } from "../../lib/alerts";
 import { BrandLogo } from "./BrandLogo";
+import { BarangayContacts } from "./barangay/BarangayContacts";
+import { BarangayObservations } from "./barangay/BarangayObservations";
 import {
   BarangayStatusPanel,
   HOUR_MS,
@@ -555,6 +557,10 @@ export function BarangayAdminDashboard() {
                     void loadQuick();
                   }}
                 />
+              ) : tab === "field-observations" ? (
+                <BarangayObservations barangay={barangay} now={now} />
+              ) : tab === "emergency-contacts" ? (
+                <BarangayContacts barangay={barangay} />
               ) : (
                 <BarangayAlertsSection
                   barangay={barangay}

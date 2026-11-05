@@ -1,4 +1,4 @@
-import { Activity, Clock, History, MapPin, Radio, Waves, type LucideIcon } from "lucide-react";
+import { Activity, Clock, Eye, History, MapPin, Phone, Radio, Waves, type LucideIcon } from "lucide-react";
 
 /*
  * The admin dashboard tabs: the only place that sets their order and labels.
@@ -19,10 +19,23 @@ export const ADMIN_TABS: ReadonlyArray<{ id: AdminTabId; label: string; icon: Lu
 
 export const MDRRMO_DEFAULT_TAB: AdminTabId = ADMIN_TABS[0].id;
 
-export type BarangayTabId = Extract<AdminTabId, "alerts" | "reports" | "quick-reports">;
+export type MdrrmoTabId = AdminTabId | "emergency-contacts" | "field-observations";
 
-const isBarangayTab = (tab: (typeof ADMIN_TABS)[number]): tab is (typeof ADMIN_TABS)[number] & { id: BarangayTabId } =>
+/** Shown after the main tabs, under an "Other" label. */
+export const MDRRMO_OTHER_TABS: ReadonlyArray<{ id: MdrrmoTabId; label: string; icon: LucideIcon }> = [
+  { id: "emergency-contacts", label: "Emergency Contacts", icon: Phone },
+  { id: "field-observations", label: "Field Observations", icon: Eye },
+];
+
+type SharedTabId = Extract<AdminTabId, "alerts" | "reports" | "quick-reports">;
+export type BarangayTabId = SharedTabId | "field-observations" | "emergency-contacts";
+
+const isSharedTab = (tab: (typeof ADMIN_TABS)[number]): tab is (typeof ADMIN_TABS)[number] & { id: SharedTabId } =>
   tab.id === "alerts" || tab.id === "reports" || tab.id === "quick-reports";
 
-/** The tabs a barangay admin has, in the same order. */
-export const BARANGAY_TABS = ADMIN_TABS.filter(isBarangayTab);
+/** The shared tabs in the same order, then the barangay-only pages. */
+export const BARANGAY_TABS: ReadonlyArray<{ id: BarangayTabId; label: string }> = [
+  ...ADMIN_TABS.filter(isSharedTab),
+  { id: "field-observations", label: "Field Observations" },
+  { id: "emergency-contacts", label: "Emergency Contacts" },
+];

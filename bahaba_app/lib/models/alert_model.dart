@@ -204,6 +204,8 @@ class Alert {
 
   /// Supabase-only fields (not in the local SQLite cache, so not in toMap).
   final String? withdrawnReason;
+  final String? expiresAt;
+  final bool isAllClear;
 
   const Alert({
     this.id,
@@ -219,7 +221,15 @@ class Alert {
     this.rejectionReason,
     this.source = 'mdrrmo',
     this.withdrawnReason,
+    this.expiresAt,
+    this.isAllClear = false,
   });
+
+  /// True once the end time has passed.
+  bool hasEnded(DateTime now) {
+    final end = DateTime.tryParse(expiresAt ?? '');
+    return end != null && !end.isAfter(now);
+  }
 
   /// "Barangay", "MDRRMO" or "Automatic".
   String get sourceLabel => switch (source) {

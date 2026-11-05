@@ -1,5 +1,5 @@
 import { useId, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown, Info, MapPin } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronDown, Info, MapPin } from "lucide-react";
 import {
   PAGASA,
   SOURCE_LABELS,
@@ -8,11 +8,13 @@ import {
   pagasaText,
   previewLine,
   type AlertLevel,
+  type AlertLifecycle,
   type AlertRow,
   type AlertSource,
   type AlertStatus,
 } from "../../../lib/alerts";
 import { formatManilaDateTime, relativeTime, toTime } from "../../../lib/barangayAdmin";
+import { STRINGS } from "../../../lib/strings";
 
 /*
  * Collapsible alert and report cards (disclosure pattern: a real button with
@@ -34,7 +36,7 @@ export function PagasaBadge({ level, compact = true }: { level: AlertLevel; comp
 
 export function SourceBadge({ source }: { source: AlertSource }) {
   return (
-    <span className="rounded-md bg-white px-2 py-0.5 text-[11px] font-bold" style={{ color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+    <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold" style={{ color: "var(--text-primary)", border: "1px solid var(--border)" }}>
       {SOURCE_LABELS[source]}
     </span>
   );
@@ -105,6 +107,7 @@ export function CollapsibleAlertCard({
   now = Date.now(),
   actions,
   showStatus = false,
+  lifecycle = null,
   id,
   extra,
 }: {
@@ -112,6 +115,8 @@ export function CollapsibleAlertCard({
   now?: number;
   actions?: ReactNode;
   showStatus?: boolean;
+  /** Replaces the status badge when known: Active, Ended, Cleared or Withdrawn. */
+  lifecycle?: AlertLifecycle | null;
   id?: string;
   /** Extra detail lines inside the expanded body. */
   extra?: ReactNode;
@@ -120,9 +125,16 @@ export function CollapsibleAlertCard({
   const summary = (
     <span className="block space-y-1">
       <span className="flex flex-wrap items-center gap-1.5">
-        <PagasaBadge level={alert.level} />
+        {alert.is_all_clear ? (
+          <span className="risk-badge is-compact risk-badge-low">
+            <CheckCircle size={12} aria-hidden="true" />
+            {STRINGS.alerts.allClear}
+          </span>
+        ) : (
+          <PagasaBadge level={alert.level} />
+        )}
         {alert.source === "barangay" && <SourceBadge source="barangay" />}
-        {showStatus && <AlertStatusBadge status={alert.status} />}
+        {lifecycle ? <span className={`risk-badge is-compact ${lifecycle.badge}`}>{lifecycle.label}</span> : showStatus && <AlertStatusBadge status={alert.status} />}
       </span>
       <span className="block text-sm font-semibold leading-snug" style={{ color: "var(--text-primary)" }}>{alert.title || "Alert"}</span>
       <span className="flex min-w-0 items-center gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -131,10 +143,11 @@ export function CollapsibleAlertCard({
         {t > 0 && <span className="shrink-0">· {relativeTime(t, now)}</span>}
       </span>
       <span className="block truncate text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{previewLine(alert.message)}</span>
+      {lifecycle?.note && <span className="block break-words text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{lifecycle.note}</span>}
     </span>
   );
   return (
-    <DisclosureCard id={id} accent={PAGASA[alert.level].accent} summary={summary} label={`${pagasaText(alert.level)}: ${alert.title || "Alert"}, ${alert.target_barangay}. Show details`}>
+    <DisclosureCard id={id} accent={alert.is_all_clear ? "var(--risk-low)" : PAGASA[alert.level].accent} summary={summary} label={`${alert.is_all_clear ? STRINGS.alerts.allClear : pagasaText(alert.level)}: ${alert.title || "Alert"}, ${alert.target_barangay}. Show details`}>
       <div className="space-y-2 border-t pt-3">
         <p className="whitespace-pre-wrap break-words text-sm font-normal" style={{ color: "var(--text-primary)" }}>{alert.message}</p>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -147,7 +160,13 @@ export function CollapsibleAlertCard({
           {showStatus && (
             <>
               <dt className="font-semibold">Status</dt>
-              <dd>{STATUS_LABELS[alert.status]}</dd>
+              <dd>{lifecycle?.label ?? STATUS_LABELS[alert.status]}</dd>
+            </>
+          )}
+          {alert.expires_at && (
+            <>
+              <dt className="font-semibold">Ends</dt>
+              <dd>{formatManilaDateTime(alert.expires_at)}</dd>
             </>
           )}
           {alert.status === "withdrawn" && (

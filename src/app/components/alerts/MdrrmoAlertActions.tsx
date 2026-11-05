@@ -6,10 +6,12 @@ import { writeAuditLog } from "../../../lib/audit";
 import {
   ALERT_REJECT_REASONS,
   PAGASA_LEVEL_OPTIONS,
+  alertLifecycle,
   editAlert,
   pagasaText,
   republishAlert,
   withdrawAlert,
+  type ActiveAlertIds,
   type AlertLevel,
   type AlertRow,
 } from "../../../lib/alerts";
@@ -55,7 +57,7 @@ export function useMdrrmoAlertActions(adminEmail: string, onChanged: (a: AlertRo
     setBusyId(alert.id);
     setError(null);
     try {
-      onChanged(await republishAlert(alert.id));
+      onChanged(await republishAlert(alert));
       void writeAuditLog("ALERT_REPUBLISHED", adminEmail, `Alert #${alert.id} republished (${pagasaText(alert.level)}, ${alert.target_barangay})`);
     } catch (err) {
       setError(errorMessage(err, "Unable to republish the alert."));
@@ -211,12 +213,14 @@ function EditAlertDialog({
 /** Collapsible box listing barangay-published alerts; collapsed by default. */
 export function BarangayBroadcastBox({
   alerts,
+  activeIds,
   now,
   adminEmail,
   onChanged,
   onDeleted,
 }: {
   alerts: AlertRow[];
+  activeIds: ActiveAlertIds | null;
   now: number;
   adminEmail: string;
   onChanged: (a: AlertRow) => void;
@@ -268,7 +272,7 @@ export function BarangayBroadcastBox({
               <AlertScrollList label="Barangay alerts">
                 {barangayAlerts.map((a) => (
                   <li key={a.id}>
-                    <CollapsibleAlertCard id={`barangay-alert-${a.id}`} alert={a} now={now} showStatus actions={actions(a)} />
+                    <CollapsibleAlertCard id={`barangay-alert-${a.id}`} alert={a} now={now} showStatus lifecycle={alertLifecycle(a, activeIds, now)} actions={actions(a)} />
                   </li>
                 ))}
               </AlertScrollList>

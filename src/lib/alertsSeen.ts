@@ -49,59 +49,44 @@ export function alertTargetsBarangay(target: string | null | undefined, barangay
   return parts.some((part) => part === "all barangays" || part === wanted || part === `barangay ${wanted}`);
 }
 
-type AlertRow = { id: number; status: string | null; target_barangay: string | null; sent_at: string | null };
+type AlertRow = { id: number; target_barangay: string | null; sent_at: string | null };
 
 /**
- * Live count of approved, relevant alerts sent after the user's last-seen
- * time. Uses the shared alerts channel (subscribeToTable), so no extra
+ * Live count of current alerts (active_alerts) for this barangay sent after
+ * the user's last-seen time, so the badge never counts an alert the Alerts
+ * screen no longer lists. Re-reads on the shared alerts channel, so no extra
  * Realtime connection is opened.
  */
 export function useUnreadAlertCount(userId: string | null, barangay: string | null): number {
-  const [unreadIds, setUnreadIds] = useState<Set<number>>(new Set());
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     if (!userId || !barangay) return;
     let cancelled = false;
-    const lastSeen = getAlertsLastSeen(userId);
 
-    const isUnread = (row: AlertRow) =>
-      row.status === "approved" &&
-      alertTargetsBarangay(row.target_barangay, barangay) &&
-      !!row.sent_at &&
-      new Date(row.sent_at).getTime() > lastSeen;
+    const load = async () => {
+      const { data, error } = await supabase
+        .from("active_alerts")
+        .select("id, target_barangay, sent_at")
+        .gt("sent_at", new Date(getAlertsLastSeen(userId)).toISOString());
+      if (cancelled || error || !data) return;
+      setUnread((data as AlertRow[]).filter((row) => alertTargetsBarangay(row.target_barangay, barangay)).length);
+    };
+    void load();
 
-    const update = (row: AlertRow) =>
-      setUnreadIds((current) => {
-        const unread = isUnread(row);
-        if (unread === current.has(row.id)) return current;
-        const next = new Set(current);
-        if (unread) next.add(row.id);
-        else next.delete(row.id);
-        return next;
-      });
-
-    void supabase
-      .from("alerts")
-      .select("id, status, target_barangay, sent_at")
-      .eq("status", "approved")
-      .gt("sent_at", new Date(lastSeen).toISOString())
-      .then(({ data, error }) => {
-        if (cancelled || error || !data) return;
-        for (const row of data as AlertRow[]) update(row);
-      });
-
-    const unsubscribe = subscribeToTable<AlertRow>("alerts", (change) => {
-      if (change.eventType === "INSERT" || change.eventType === "UPDATE") {
-        update(change.new as AlertRow);
-      }
+    let changeTimer: number | undefined;
+    const unsubscribe = subscribeToTable<AlertRow>("alerts", () => {
+      window.clearTimeout(changeTimer);
+      changeTimer = window.setTimeout(() => void load(), 300);
     });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(changeTimer);
       unsubscribe();
-      setUnreadIds(new Set());
+      setUnread(0);
     };
   }, [userId, barangay]);
 
-  return unreadIds.size;
+  return unread;
 }

@@ -6,15 +6,21 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../config/app_strings.dart';
+import '../../models/alert_model.dart';
 import '../../models/barangay_model.dart';
+import '../../providers/app_state.dart';
 import '../../providers/resident_providers.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/report_display.dart';
 import '../../widgets/clay_button.dart';
 import '../../widgets/clay_container.dart';
+import '../../widgets/flat_status_card.dart';
+import '../../widgets/ground_reports_card.dart';
 import '../../widgets/risk_badge.dart';
 import '../../widgets/screen_header.dart';
 import 'baha_history_screen.dart';
+import 'main_shell.dart';
 
 /// GIS Hazard Map using OpenStreetMap (flutter_map).
 /// Shows barangay flood zones as colored circles + markers, and the user's
@@ -227,6 +233,8 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
               ),
             ),
           ),
+
+          const _MapAlertBanner(),
 
           // Map
           ClayContainer(
@@ -468,6 +476,70 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _BarangayDetailSheet(barangay: b),
+    );
+  }
+}
+
+/// Newest current alert above the map; opens the Alerts tab. Shows nothing
+/// when there are none.
+class _MapAlertBanner extends StatelessWidget {
+  const _MapAlertBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = context.watch<AlertProvider>().alerts;
+    if (alerts.isEmpty) return const SizedBox.shrink();
+    final Alert alert = alerts.first;
+    final more =
+        alerts.length > 1 ? ' · ${AppStrings.alertMore(alerts.length - 1)}' : '';
+    final label = alert.isAllClear
+        ? AppStrings.alertAllClear
+        : '${AppStrings.alertCurrent} · ${alert.level.pagasaText}';
+
+    return Semantics(
+      button: true,
+      label: '$label: ${alert.title}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: () => MainShell.selectTab(context, MainShell.alertsTab),
+        child: FlatStatusCard(
+          accent: alert.isAllClear
+              ? AppColors.riskLowFill
+              : AlertLevelBadge.colorFor(alert.level),
+          margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$label$more',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      alert.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -763,6 +835,12 @@ class _BarangayDetailSheet extends StatelessWidget {
             const SizedBox(height: 20),
 
             // GPS
+            GroundReportsCard(
+              barangay: barangay.name,
+              ownBarangay:
+                  barangay.name == context.read<AppState>().currentUser?.barangay,
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(

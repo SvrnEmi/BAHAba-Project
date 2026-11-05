@@ -7,6 +7,7 @@ import { GISHazardMap } from "./components/GISHazardMap";
 import { BahaHistory } from "./components/BahaHistory";
 import { Alerts } from "./components/Alerts";
 import { CommunityReports } from "./components/CommunityReports";
+import { PostedReportPage } from "./components/PostedReports";
 import { MDRRMOAdminDashboard } from "./components/MDRRMOAdminDashboard";
 import { BarangayAdminDashboard } from "./components/BarangayAdminDashboard";
 import { Profile } from "./components/Profile";
@@ -109,6 +110,7 @@ export const router = createBrowserRouter([
       { path: "/alerts", element: <Alerts /> },
       { path: "/alerts/all", element: <AllAlertsPage role="resident" /> },
       { path: "/reports", element: <CommunityReports /> },
+      { path: "/reports/:id", element: <PostedReportPage /> },
       { path: "/contacts", element: <EmergencyContactsPage /> },
     ],
   },

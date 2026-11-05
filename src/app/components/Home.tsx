@@ -5,8 +5,6 @@ import {
   Camera,
   CloudRain,
   Map as MapIcon,
-  ChevronRight,
-  FileText,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -20,12 +18,7 @@ import { useUnreadAlertCount } from "../../lib/alertsSeen";
 import { ProfileButton } from "./ProfileButton";
 import { BahaCountdownCard } from "./BahaCountdownCard";
 import { GroundReportsCard } from "./GroundReportsCard";
-import {
-  displayReporterName,
-  reportBelongsToBarangay,
-  waterLevelLabel,
-  type BarangayPoint,
-} from "../../lib/reports";
+import { PostedReports } from "./PostedReports";
 
 type FloodRisk = "low" | "medium" | "high";
 
@@ -208,10 +201,7 @@ export function Home() {
         </ClayButton>
       </div>
 
-      {/* Latest report from the resident's barangay */}
       <GroundReportsCard barangay={profileBarangay} ownBarangay className="mb-6" />
-
-      <LatestReportCard barangay={profileBarangay} onOpen={() => navigate("/reports")} />
 
       {/* Latest Orange / Red alert for this barangay (flat, never clay; collapsed by default) */}
       {latestAlert && (
@@ -222,6 +212,9 @@ export function Home() {
           <CollapsibleAlertCard alert={latestAlert} />
         </section>
       )}
+
+      {/* Approved reports from the resident's barangay */}
+      <PostedReports barangay={profileBarangay} />
 
       {/* Short "How rainfall risk works" with a link to the full page */}
       <RainfallInfoShort />
@@ -299,146 +292,6 @@ function HeaderCircle({
           </span>
         )}
       </span>
-    </button>
-  );
-}
-
-type LatestReportRow = {
-  id: number;
-  user_name: string | null;
-  location: string | null;
-  lat: number | null;
-  lng: number | null;
-  water_level: string | null;
-  timestamp: string;
-};
-
-type LatestReportState =
-  | { kind: "loading" }
-  | { kind: "error" }
-  | { kind: "empty" }
-  | { kind: "report"; report: LatestReportRow };
-
-/**
- * Compact teal card with the newest approved report from the resident's
- * barangay. Live via the shared community_reports channel; hidden on error.
- */
-function LatestReportCard({ barangay, onOpen }: { barangay: string | null; onOpen: () => void }) {
-  const [state, setState] = useState<LatestReportState>({ kind: "loading" });
-
-  useEffect(() => {
-    if (!barangay) return;
-    let cancelled = false;
-    let barangayPoints: BarangayPoint[] = [];
-    let run = 0;
-
-    // Re-runs the selection; only the newest run may update state.
-    const select = async () => {
-      const current = ++run;
-      const { data, error } = await supabase
-        .from("community_reports")
-        .select("id, user_name, location, lat, lng, water_level, timestamp")
-        .eq("status", "approved")
-        .order("timestamp", { ascending: false })
-        .limit(30);
-      if (cancelled || current !== run) return;
-      if (error) {
-        setState({ kind: "error" });
-        return;
-      }
-      const match = ((data as LatestReportRow[]) ?? []).find((report) =>
-        reportBelongsToBarangay(report, barangay, barangayPoints),
-      );
-      setState(match ? { kind: "report", report: match } : { kind: "empty" });
-    };
-
-    const start = async () => {
-      // Coordinates for nearest-barangay matching. If this fails, matching
-      // falls back to the location text.
-      const { data } = await supabase.from("barangays").select("name, lat, lng");
-      if (cancelled) return;
-      barangayPoints = ((data as Array<{ name: string; lat: number | null; lng: number | null }>) ?? [])
-        .filter((b) => b.lat != null && b.lng != null)
-        .map((b) => ({ name: b.name, lat: Number(b.lat), lng: Number(b.lng) }));
-      await select();
-    };
-
-    void start();
-    const unsubscribe = subscribeToTable("community_reports", () => {
-      void select();
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [barangay]);
-
-  if (!barangay || state.kind === "error") return null;
-
-  const cardStyle = { background: "var(--report-teal)", borderRadius: 20, color: "#fff" } as const;
-
-  if (state.kind === "loading") {
-    return (
-      <div
-        aria-hidden="true"
-        className="clay mb-6 h-[88px] animate-pulse motion-reduce:animate-none"
-        style={{ ...cardStyle, opacity: 0.55 }}
-      />
-    );
-  }
-
-  const tag = (
-    <span
-      className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold leading-4"
-      style={{ color: "var(--report-teal)" }}
-    >
-      <FileText size={12} aria-hidden="true" />
-      Reports
-    </span>
-  );
-
-  if (state.kind === "empty") {
-    return (
-      <button
-        type="button"
-        onClick={onOpen}
-        className="clay clay-press mb-6 flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left"
-        style={cardStyle}
-      >
-        {tag}
-        <span className="min-w-0 flex-1 truncate text-sm">
-          <span className="font-semibold">No reports in {barangay} yet</span>
-          <span className="opacity-90"> · Be the first to report</span>
-        </span>
-        <ChevronRight size={18} className="shrink-0" aria-hidden="true" />
-      </button>
-    );
-  }
-
-  const { report } = state;
-  const detail = [waterLevelLabel(report.water_level), report.location?.trim()].filter(Boolean).join(" - ");
-  const reporter = displayReporterName(report.user_name);
-  const when = formatRelative(report.timestamp);
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`Latest report in ${barangay}: ${detail}, by ${reporter}, ${when}. Open community reports.`}
-      className="clay clay-press mb-6 flex w-full items-center gap-2 px-3 py-2.5 text-left"
-      style={cardStyle}
-    >
-      <span className="min-w-0 flex-1">
-        {tag}
-        <span className="mt-1 block truncate text-sm font-semibold leading-5">Latest report - {barangay}</span>
-        <span className="block truncate text-xs leading-4 opacity-95">{detail}</span>
-        <span className="mt-0.5 flex items-center justify-between gap-2 text-xs leading-4 opacity-90">
-          <span className="min-w-0 truncate">{reporter}</span>
-          <span className="shrink-0">{when}</span>
-        </span>
-      </span>
-      <ChevronRight size={18} className="shrink-0" aria-hidden="true" />
     </button>
   );
 }

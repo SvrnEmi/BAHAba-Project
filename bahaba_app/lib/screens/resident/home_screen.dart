@@ -5,17 +5,15 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/alert_model.dart';
-import '../../models/community_report_model.dart';
 import '../../providers/app_state.dart';
 import '../../providers/resident_providers.dart';
 import '../../repositories/barangay_repository.dart';
-import '../../repositories/report_repository.dart';
 import '../../services/alerts_seen_store.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/report_display.dart';
 import '../../config/app_strings.dart';
 import '../../widgets/alert_card.dart';
 import '../../widgets/ground_reports_card.dart';
+import '../../widgets/posted_reports_section.dart';
 import '../rainfall_info_screen.dart';
 import '../../widgets/baha_countdown_card.dart';
 import '../../widgets/info_tip.dart';
@@ -122,14 +120,10 @@ class HomeScreen extends StatelessWidget {
             GroundReportsCard(barangay: residentBarangay, ownBarangay: true),
 
             const SizedBox(height: 24),
-            // Latest report from the resident's barangay
-            _LatestReportCard(
-              barangay: residentBarangay,
-              onOpen: openReports,
-            ),
-
-            const SizedBox(height: 24),
             const _LatestAlert(),
+            const SizedBox(height: 24),
+            // Approved reports from the resident's barangay
+            PostedReportsSection(barangay: residentBarangay),
             const SizedBox(height: 24),
             // Short "How rainfall risk works" with a link to the full screen
             const RainfallInfoShortCard(),
@@ -276,210 +270,6 @@ class _AlertsBellState extends State<_AlertsBell> {
       label: unread > 0 ? 'Alerts, $unread unread' : 'Alerts',
       badge: unread,
       onTap: widget.onTap,
-    );
-  }
-}
-
-/// Compact teal card with the newest approved report from the resident's
-/// barangay. Uses the shared community_reports stream (see RealtimeHub), so
-/// no extra Realtime connection is opened. Hidden if the stream fails.
-class _LatestReportCard extends StatefulWidget {
-  final String? barangay;
-  final VoidCallback onOpen;
-
-  const _LatestReportCard({required this.barangay, required this.onOpen});
-
-  @override
-  State<_LatestReportCard> createState() => _LatestReportCardState();
-}
-
-class _LatestReportCardState extends State<_LatestReportCard> {
-  static const double _height = 92;
-
-  StreamSubscription<List<CommunityReport>>? _sub;
-  List<CommunityReport>? _recent; // null while loading
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = ReportRepository().watchApproved().listen(
-      (reports) {
-        // Same window as the web app: newest 30 approved reports.
-        if (mounted) setState(() => _recent = reports.take(30).toList());
-      },
-      onError: (Object error) {
-        debugPrint('Latest report stream failed: $error');
-        if (mounted) setState(() => _failed = true);
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final barangay = widget.barangay;
-    if (barangay == null || barangay.isEmpty || _failed) {
-      return const SizedBox.shrink();
-    }
-
-    final recent = _recent;
-    if (recent == null) {
-      return ExcludeSemantics(
-        child: Container(
-          height: _height,
-          decoration: BoxDecoration(
-            color: AppColors.reportTeal.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-      );
-    }
-
-    // Selection re-runs on every stream event and when barangays load.
-    final barangays = context.watch<BarangayProvider>().barangays;
-    CommunityReport? latest;
-    for (final report in recent) {
-      if (reportBelongsToBarangay(report, barangay, barangays)) {
-        latest = report;
-        break;
-      }
-    }
-
-    const white = Colors.white;
-    final tag = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: white,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.description_outlined,
-              size: 12, color: AppColors.reportTeal),
-          SizedBox(width: 4),
-          Text(
-            'Reports',
-            style: TextStyle(
-              color: AppColors.reportTeal,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-    );
-    const chevron = Icon(Icons.chevron_right, color: white, size: 20);
-
-    if (latest == null) {
-      return ClayContainer(
-        color: AppColors.reportTeal,
-        borderRadius: 20,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        onTap: widget.onOpen,
-        semanticLabel: 'No reports in $barangay yet. Be the first to report.',
-        child: Row(
-          children: [
-            tag,
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'No reports in $barangay yet',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const TextSpan(text: ' · Be the first to report'),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: white, fontSize: 13),
-              ),
-            ),
-            chevron,
-          ],
-        ),
-      );
-    }
-
-    final detail = [
-      waterLevelLabel(latest.waterLevel),
-      if (latest.location.trim().isNotEmpty) latest.location.trim(),
-    ].join(' - ');
-    final reporter = displayReporterName(latest.userName);
-    final when = relativeTime(latest.timestamp);
-
-    return ClayContainer(
-      color: AppColors.reportTeal,
-      borderRadius: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      onTap: widget.onOpen,
-      semanticLabel: 'Latest report in $barangay: $detail, by $reporter, '
-          '$when. Open community reports.',
-      child: ExcludeSemantics(
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  tag,
-                  const SizedBox(height: 4),
-                  Text(
-                    'Latest report - $barangay',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.heading(
-                      size: 14,
-                      weight: FontWeight.w600,
-                      color: white,
-                    ).copyWith(height: 1.25),
-                  ),
-                  Text(
-                    detail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: white, fontSize: 12, height: 1.3),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          reporter,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: white, fontSize: 12, height: 1.3),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        when,
-                        style: const TextStyle(
-                            color: white, fontSize: 12, height: 1.3),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 6),
-            chevron,
-          ],
-        ),
-      ),
     );
   }
 }

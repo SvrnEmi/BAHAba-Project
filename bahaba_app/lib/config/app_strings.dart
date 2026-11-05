@@ -73,6 +73,38 @@ class AppStrings {
     return '${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'} ago';
   }
 
+  // Posted reports
+  static const postedTitle = 'Posted reports';
+  static const postedDetailTitle = 'Flood report';
+  static const postedChecking = 'Checking reports...';
+  static const postedLoadFailed =
+      'Could not load the reports. Check your connection.';
+  static const postedRetry = 'Try again';
+  static const postedNone = 'No verified reports in your barangay yet.';
+  static String postedBy(String barangay) =>
+      'Reported by a resident of $barangay';
+  static String postedOpen(String location, String level, String when) =>
+      '$location, $level, $when. Open the full report.';
+  static const postedUnknownLocation = 'Unknown location';
+  static const postedMissing = 'This report is no longer posted.';
+  static const postedPhotoAlt = 'Flood report photo';
+  static const postedPhotoUnavailable = 'Photo unavailable';
+
+  // Report pop-ups
+  static String popupVerified(String barangay) =>
+      'A flood report was verified in $barangay';
+  static const popupOwn = 'Your report was verified and is now posted.';
+  static const popupRejected = 'Your report was not accepted';
+  static String popupMany(int count, String barangay) =>
+      '$count new verified ${count == 1 ? 'report' : 'reports'} in $barangay';
+  static String popupUpdates(int count) => '$count report updates';
+  static const popupOwnTag = 'Your report';
+  static const popupReason = 'Reason:';
+  static const popupNoReason = 'No reason was given.';
+  static const popupViewReport = 'View report';
+  static const popupView = 'View';
+  static const popupDismiss = 'Dismiss';
+
   // Emergency contacts
   static const contactsTitle = 'Emergency Contacts';
   static const contactsSubtitle = 'Tap a number to call';

@@ -95,7 +95,7 @@ Primary domain models (high-level):
 ## Local Database & Seed
 
 - DB uses `sqflite` and is seeded on first run from `seed_data.dart`.
-- Seeded data includes: 9 barangays for Odiongan, Romblon; sample users and sample alerts/reports.
+- Barangays: the 25 official barangays of Odiongan, Romblon, read from the Supabase `barangays` table (offline fallback lists: `src/lib/barangays.ts` and `bahaba_app/lib/config/barangays.dart`). Seeded data includes sample users and sample alerts/reports.
 
 ---
 

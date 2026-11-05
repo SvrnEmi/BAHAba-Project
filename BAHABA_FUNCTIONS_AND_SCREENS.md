@@ -41,11 +41,11 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
 
  - View resident, alert, report, and water-level statistics for the Barangay.
  - Draft and submit an advisory, warning, or critical alert.
- - View whether each alert is pending, approved, or rejected.
+ - View whether each alert is published or withdrawn.
  - View community reports associated with the Barangay dashboard.
- - Preview an alert before submission.
+ - Preview an alert (push text with its PAGASA color and label) and confirm before publishing.
 
- Barangay alerts are submitted as `pending` and require MDRRMO verification before they are visible in the public alert feed.
+ Barangay alerts are published immediately to residents of that barangay (the server sets the target barangay, source and status; limit 5 per barangay per hour). The barangay admin can withdraw their own alert with a reason; MDRRMO can edit, withdraw, republish or delete any alert.
 
  ### MDRRMO Admin
 
@@ -165,11 +165,8 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
  - Maps advisory, warning, and critical levels to low, medium, and high visual priority.
  - Subscribes to newly inserted alert records for live updates.
  - Shows an empty state while no approved alerts are available.
- - Includes a prototype social-media update section for MDRRMO and LGU posts.
 
  Security behavior: the database policy exposes approved alerts to authenticated users; pending and rejected alerts should not appear in the resident feed.
-
- Current limitation: social-media entries are static prototype content, not an external feed integration.
 
  #### `/reports` - Community reports
 
@@ -240,7 +237,7 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
 
  - Requires a non-empty message.
  - Requires at least one selected channel.
- - Supports push, SMS, Facebook, and Twitter channel selections in the UI.
+ - Supports push and SMS channel selections in the UI.
  - Creates an alert in Supabase with `approved` status.
  - Adds the new alert to local state and displays a success notification.
 
@@ -250,7 +247,7 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
  - Removes a deleted report locally after confirmation.
  - Records a local audit entry for report deletion.
 
- Current limitations: delivery channels are represented in the data and UI but are not connected to push, SMS, Facebook, or Twitter providers; Settings is visual only; some dashboard metrics are prototype estimates.
+ Current limitations: delivery channels are represented in the data and UI but are not connected to SMS providers; Settings is visual only; some dashboard metrics are prototype estimates.
 
  ### Barangay admin screen
 
@@ -451,7 +448,7 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
  - Implement actual offline caching and synchronization for the web and Flutter clients.
  - Implement password reset and make Remember me functional.
  - Link Terms of Service and Privacy Policy content.
- - Connect alert channels to real push, SMS, and social integrations.
+ - Connect the SMS alert channel to a real provider.
  - Filter Barangay dashboard reports by the authenticated administrator's Barangay.
  - Persist every administrative action to `audit_logs`, including approvals, rejections, and alert creation.
  - Add rejection-reason controls to moderation screens.

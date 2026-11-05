@@ -28,3 +28,16 @@ vite-run.md
 vite-run.txt
 .pw-edge.tmp.config.ts
 .repro-tmp.mjs
+
+# Secrets and signing files: never commit these
+google-services.json
+GoogleService-Info.plist
+*.jks
+*.keystore
+*.pem
+*.p12
+key.properties
+
+# Build output
+*.apk
+*.aab

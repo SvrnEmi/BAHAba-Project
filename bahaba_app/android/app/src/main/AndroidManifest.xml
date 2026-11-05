@@ -6,16 +6,18 @@
     <!-- Internet permission for OpenStreetMap tiles and web content -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Camera + storage for community report photos -->
+    <!-- Camera for report photos (gallery picks need no storage permission) -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
     <!-- Flood alert notifications (runtime permission on Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Tap-to-call emergency hotlines (url_launcher, Android 11+) -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.DIAL" />
             <data android:scheme="tel" />
@@ -26,7 +28,7 @@
         android:label="BAHAba"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:roundIcon="@mipmap/ic_launcher_round">
         <activity
             android:name=".MainActivity"
             android:exported="true"

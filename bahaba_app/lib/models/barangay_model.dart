@@ -49,17 +49,14 @@ enum FloodRisk {
   }
 }
 
+/// A barangay flood zone: one approximate centre point and its live risk.
 class Barangay {
   final int? id;
   final String name;
   final double lat;
   final double lng;
   final FloodRisk floodRisk;
-  final String waterLevel;
-  final String population;
-  final String evacuated;
   final String lastUpdate;
-  final String description;
 
   const Barangay({
     this.id,
@@ -67,13 +64,11 @@ class Barangay {
     required this.lat,
     required this.lng,
     required this.floodRisk,
-    required this.waterLevel,
-    required this.population,
-    required this.evacuated,
     required this.lastUpdate,
-    required this.description,
   });
 
+  /// Row for the local SQLite cache. The old water_level, population,
+  /// evacuated and description columns are NOT NULL, so they get ''.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -81,27 +76,28 @@ class Barangay {
       'lat': lat,
       'lng': lng,
       'flood_risk': floodRisk.value,
-      'water_level': waterLevel,
-      'population': population,
-      'evacuated': evacuated,
       'last_update': lastUpdate,
-      'description': description,
+      'water_level': '',
+      'population': '',
+      'evacuated': '',
+      'description': '',
     };
   }
 
-  factory Barangay.fromMap(Map<String, dynamic> map) {
+  /// A local cache row, or a Supabase barangays row. Null when it has no
+  /// usable name or coordinates.
+  static Barangay? tryFromMap(Map<String, dynamic> map) {
+    final name = (map['name'] ?? '').toString().trim();
+    final lat = map['lat'];
+    final lng = map['lng'];
+    if (name.isEmpty || lat is! num || lng is! num) return null;
     return Barangay(
-      id: map['id'] as int?,
-      name: map['name'] as String,
-      lat: (map['lat'] as num).toDouble(),
-      lng: (map['lng'] as num).toDouble(),
-      floodRisk: FloodRisk.fromString(map['flood_risk'] as String),
-      waterLevel: map['water_level'] as String,
-      population: map['population'] as String,
-      evacuated: map['evacuated'] as String,
-      lastUpdate: map['last_update'] as String,
-      description: map['description'] as String,
+      id: map['id'] is num ? (map['id'] as num).toInt() : null,
+      name: name,
+      lat: lat.toDouble(),
+      lng: lng.toDouble(),
+      floodRisk: FloodRisk.fromString(map['flood_risk']?.toString() ?? 'low'),
+      lastUpdate: map['last_update']?.toString() ?? '',
     );
   }
 }
-

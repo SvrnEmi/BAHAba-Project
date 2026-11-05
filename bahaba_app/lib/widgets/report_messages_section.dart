@@ -368,7 +368,15 @@ class _ReportThreadState extends State<ReportThread> {
           maxLines: 4,
           maxLength: kMessageMaxLength,
           textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(hintText: 'Write a message'),
+          // Stays enabled on pending and rejected reports too.
+          decoration: InputDecoration(
+            labelText: widget.viewerRole == SenderRole.resident
+                ? 'Reply to the barangay or MDRRMO'
+                : null,
+            hintText: widget.viewerRole == SenderRole.resident
+                ? 'Reply to the barangay or MDRRMO'
+                : 'Write a message',
+          ),
           // Hidden until the draft is near the limit.
           buildCounter: (context,
                   {required currentLength, required isFocused, maxLength}) =>

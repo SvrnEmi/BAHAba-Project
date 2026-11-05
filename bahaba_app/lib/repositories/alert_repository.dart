@@ -2,11 +2,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/database_helper.dart';
 import '../models/alert_model.dart';
-import '../models/audit_log_model.dart';
 import '../services/realtime_hub.dart';
 import '../services/sync_service.dart';
 
-/// Data access for alerts + audit logging.
+/// Data access for alerts.
 class AlertRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
   final SyncService _sync = SyncService.instance;
@@ -36,6 +35,87 @@ class AlertRepository {
     });
   }
 
+  /// Explicit columns (never select *).
+  static const columns =
+      'id, level, title, message, target_barangay, created_by, status, source, '
+      'channels, sent_at, recipients, rejection_reason, withdrawn_reason';
+
+  static String _targetFilter(String barangayName) =>
+      'target_barangay.eq."$barangayName",target_barangay.eq."All Barangays"';
+
+  /// Published (approved) alerts for a resident's barangay plus "All
+  /// Barangays", newest first. Withdrawn alerts are hidden by the server.
+  Future<List<Alert>> fetchResidentAlerts(String barangayName,
+      {int limit = 50}) async {
+    final rows = await _client
+        .from('alerts')
+        .select(columns)
+        .eq('status', 'approved')
+        .or(_targetFilter(barangayName))
+        .order('sent_at', ascending: false)
+        .limit(limit);
+    return rows.map<Alert>(_fromRow).toList();
+  }
+
+  /// One page (20 rows, via range()) of the resident "All alerts" list with
+  /// search, PAGASA color, source and date filters. Returns rows + total.
+  Future<({List<Alert> rows, int total})> fetchResidentPage({
+    required String barangayName,
+    required int page,
+    String search = '',
+    AlertLevel? level,
+    String? source,
+    DateTime? from,
+    DateTime? to,
+    String sort = 'newest',
+    int pageSize = 20,
+  }) async {
+    var query = _client
+        .from('alerts')
+        .select(columns)
+        .eq('status', 'approved')
+        .or(_targetFilter(barangayName));
+    final text = search.replaceAll(RegExp(r'[,()%*\\"]'), ' ').trim();
+    if (text.isNotEmpty) {
+      query = query.or('title.ilike.%$text%,message.ilike.%$text%');
+    }
+    if (level != null) query = query.eq('level', level.value);
+    if (source == 'barangay' || source == 'mdrrmo') {
+      query = query.eq('source', source!);
+    } else if (source == 'auto') {
+      query = query.not('source', 'in', '(barangay,mdrrmo)');
+    }
+    if (from != null) {
+      query = query.gte('sent_at', DateTime.utc(from.year, from.month, from.day)
+          .subtract(const Duration(hours: 8))
+          .toIso8601String());
+    }
+    if (to != null) {
+      query = query.lt('sent_at', DateTime.utc(to.year, to.month, to.day + 1)
+          .subtract(const Duration(hours: 8))
+          .toIso8601String());
+    }
+    final start = page * pageSize;
+    // pagasa_label sorts Be Alert < Be Prepared < Take Action: descending is Red first.
+    final ordered = switch (sort) {
+      'oldest' => query.order('sent_at', ascending: true),
+      'level' => query
+          .order('pagasa_label', ascending: false, nullsFirst: false)
+          .order('sent_at', ascending: false),
+      'barangay' => query
+          .order('target_barangay', ascending: true)
+          .order('sent_at', ascending: false),
+      _ => query.order('sent_at', ascending: false),
+    };
+    final response = await ordered
+        .range(start, start + pageSize - 1)
+        .count(CountOption.exact);
+    return (
+      rows: response.data.map<Alert>(_fromRow).toList(),
+      total: response.count,
+    );
+  }
+
   /// Alerts targeting [barangayName] or all barangays, newest first.
   Future<List<Alert>> fetchForBarangay(String barangayName) async {
     final rows = await _client
@@ -46,9 +126,9 @@ class AlertRepository {
     return rows.map<Alert>(_fromRow).toList();
   }
 
-  /// Submits a barangay admin's alert directly to Supabase as pending, so
-  /// MDRRMO can review it right away.
-  Future<Alert> submitForVerification({
+  /// Publishes a barangay admin's alert to their residents. The database
+  /// stamps the status, source, target barangay and time for this role.
+  Future<Alert> publishBarangayAlert({
     required AlertLevel level,
     required String title,
     required String message,
@@ -66,15 +146,11 @@ class AlertRepository {
           'sent_at': DateTime.now().toUtc().toIso8601String(),
           'recipients': recipients,
           'created_by': '$barangayName Barangay Admin',
-          'status': AlertStatus.pending.value,
         })
         .select()
         .single();
     return _fromRow(row);
   }
-
-  /// Alerts pending MDRRMO verification (created by barangay admins).
-  Future<List<Alert>> getPendingAlerts() => _db.getPendingAlerts();
 
   /// Alerts created by a specific user (barangay admin "my alerts").
   Future<List<Alert>> getMyAlerts(String createdBy) =>
@@ -119,27 +195,6 @@ class AlertRepository {
     );
   }
 
-  Future<void> approveAlert(int id, String adminName) async {
-    await _db.updateAlertStatus(id, AlertStatus.approved);
-    await _db.insertAuditLog(AuditLog(
-      action: 'ALERT_APPROVED',
-      user: adminName,
-      timestamp: _now(),
-      details: 'Approved alert #$id for broadcast',
-    ));
-  }
-
-  Future<void> rejectAlert(int id, String reason, String adminName) async {
-    await _db.updateAlertStatus(id, AlertStatus.rejected,
-        rejectionReason: reason);
-    await _db.insertAuditLog(AuditLog(
-      action: 'ALERT_REJECTED',
-      user: adminName,
-      timestamp: _now(),
-      details: 'Rejected alert #$id - Reason: $reason',
-    ));
-  }
-
   Future<int> count() => _db.alertCount();
 
   Future<void> syncPending() => _sync.syncPending();
@@ -152,17 +207,14 @@ class AlertRepository {
         title: row['title'] as String? ?? '',
         message: row['message'] as String? ?? '',
         targetBarangay: row['target_barangay'] as String? ?? 'All Barangays',
-        channels: (row['channels'] as String? ?? '')
-            .split(',')
-            .where((c) => c.isNotEmpty)
-            .map(AlertChannel.fromString)
-            .toList(),
+        channels: AlertChannel.parseList(row['channels'] as String?),
         sentAt: row['sent_at'] as String? ?? DateTime.now().toIso8601String(),
         recipients: row['recipients'] as int? ?? 0,
         createdBy: row['created_by'] as String? ?? 'System',
         status: AlertStatus.fromString(row['status'] as String? ?? 'approved'),
         rejectionReason: row['rejection_reason'] as String?,
         source: row['source'] as String? ?? 'mdrrmo',
+        withdrawnReason: row['withdrawn_reason'] as String?,
       );
 
   String _now() =>

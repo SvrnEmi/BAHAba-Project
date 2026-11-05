@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 import '../providers/app_state.dart';
 import '../repositories/auth_repository.dart';
 import '../theme/app_theme.dart';
+import '../utils/auth_errors.dart';
 import '../utils/navigation.dart';
 import '../widgets/clay_container.dart';
 import '../widgets/brand_logo.dart';
@@ -13,7 +14,10 @@ import 'register_screen.dart';
 
 /// Login screen with local DB authentication.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// Pre-fills the email field, e.g. when sent here from Register.
+  final String? initialEmail;
+
+  const LoginScreen({super.key, this.initialEmail});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -21,10 +25,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  late final _emailController = TextEditingController(text: widget.initialEmail);
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _loading = false;
+  bool _sendingReset = false;
 
   @override
   void dispose() {
@@ -71,6 +76,41 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _handleForgotPassword() async {
+    final email = _emailController.text.trim();
+    final messenger = ScaffoldMessenger.of(context);
+    if (!email.contains('@')) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Enter your email above first.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _sendingReset = true);
+    try {
+      await context.read<AppState>().sendPasswordReset(email);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(resetLinkSentMessage),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      logAuthError('Password reset', e);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(resetErrorMessage(e)),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingReset = false);
     }
   }
 
@@ -204,13 +244,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                           TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Password reset coming soon.'),
-                                ),
-                              );
-                            },
+                            onPressed:
+                                _sendingReset ? null : _handleForgotPassword,
                             child: const Text('Forgot password?'),
                           ),
                         ],

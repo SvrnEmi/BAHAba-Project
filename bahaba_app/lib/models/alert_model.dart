@@ -37,6 +37,43 @@ enum AlertLevel {
     }
   }
 
+  /// PAGASA color name, always shown together with [pagasaLabel].
+  String get pagasaColor {
+    switch (this) {
+      case AlertLevel.advisory:
+        return 'Yellow';
+      case AlertLevel.warning:
+        return 'Orange';
+      case AlertLevel.critical:
+        return 'Red';
+    }
+  }
+
+  String get pagasaLabel {
+    switch (this) {
+      case AlertLevel.advisory:
+        return 'Be Alert';
+      case AlertLevel.warning:
+        return 'Be Prepared';
+      case AlertLevel.critical:
+        return 'Take Action';
+    }
+  }
+
+  /// "Orange - Be Prepared".
+  String get pagasaText => '$pagasaColor - $pagasaLabel';
+
+  static AlertLevel fromPagasaColor(String color) {
+    switch (color) {
+      case 'orange':
+        return AlertLevel.warning;
+      case 'red':
+        return AlertLevel.critical;
+      default:
+        return AlertLevel.advisory;
+    }
+  }
+
   String get description {
     switch (this) {
       case AlertLevel.advisory:
@@ -63,22 +100,26 @@ enum AlertLevel {
 /// Communication channels for alert broadcast.
 enum AlertChannel {
   push,
-  sms,
-  facebook,
-  twitter;
+  sms;
 
   static AlertChannel fromString(String value) {
     switch (value) {
       case 'sms':
         return AlertChannel.sms;
-      case 'facebook':
-        return AlertChannel.facebook;
-      case 'twitter':
-        return AlertChannel.twitter;
       default:
         return AlertChannel.push;
     }
   }
+
+  /// Parses the stored comma-separated `channels` column. Values other than
+  /// push/sms (left in older rows) are skipped; duplicates are dropped.
+  static List<AlertChannel> parseList(String? csv) => (csv ?? '')
+      .split(',')
+      .map((c) => c.trim())
+      .where((c) => c == 'push' || c == 'sms')
+      .toSet()
+      .map(fromString)
+      .toList();
 
   String get value {
     switch (this) {
@@ -86,10 +127,6 @@ enum AlertChannel {
         return 'push';
       case AlertChannel.sms:
         return 'sms';
-      case AlertChannel.facebook:
-        return 'facebook';
-      case AlertChannel.twitter:
-        return 'twitter';
     }
   }
 
@@ -99,19 +136,17 @@ enum AlertChannel {
         return 'Push Notification';
       case AlertChannel.sms:
         return 'SMS';
-      case AlertChannel.facebook:
-        return 'Facebook';
-      case AlertChannel.twitter:
-        return 'X (Twitter)';
     }
   }
 }
 
-/// Alert status for the barangay → MDRRMO verification workflow.
+/// Alert status. Only approved (published) and withdrawn are still set; the
+/// others remain for older rows.
 enum AlertStatus {
   pending,
   approved,
-  rejected;
+  rejected,
+  withdrawn;
 
   static AlertStatus fromString(String value) {
     switch (value) {
@@ -119,6 +154,8 @@ enum AlertStatus {
         return AlertStatus.approved;
       case 'rejected':
         return AlertStatus.rejected;
+      case 'withdrawn':
+        return AlertStatus.withdrawn;
       default:
         return AlertStatus.pending;
     }
@@ -132,17 +169,21 @@ enum AlertStatus {
         return 'approved';
       case AlertStatus.rejected:
         return 'rejected';
+      case AlertStatus.withdrawn:
+        return 'withdrawn';
     }
   }
 
   String get label {
     switch (this) {
       case AlertStatus.pending:
-        return 'Pending';
+        return 'Not published';
       case AlertStatus.approved:
-        return 'Approved';
+        return 'Published';
       case AlertStatus.rejected:
         return 'Rejected';
+      case AlertStatus.withdrawn:
+        return 'Withdrawn';
     }
   }
 }
@@ -159,7 +200,10 @@ class Alert {
   final String createdBy;
   final AlertStatus status;
   final String? rejectionReason;
-  final String? source; // 'mdrrmo' | 'barangay'
+  final String? source; // 'mdrrmo' | 'barangay' | automatic
+
+  /// Supabase-only fields (not in the local SQLite cache, so not in toMap).
+  final String? withdrawnReason;
 
   const Alert({
     this.id,
@@ -174,7 +218,18 @@ class Alert {
     this.status = AlertStatus.approved,
     this.rejectionReason,
     this.source = 'mdrrmo',
+    this.withdrawnReason,
   });
+
+  /// "Barangay", "MDRRMO" or "Automatic".
+  String get sourceLabel => switch (source) {
+        'barangay' => 'Barangay',
+        'mdrrmo' || null || '' => 'MDRRMO',
+        _ => 'Automatic',
+      };
+
+  /// Push / preview line: "[Orange - Be Prepared] Title".
+  String get previewText => '[${level.pagasaText}] $title';
 
   Map<String, dynamic> toMap() {
     return {
@@ -200,11 +255,7 @@ class Alert {
       title: map['title'] as String,
       message: map['message'] as String,
       targetBarangay: map['target_barangay'] as String,
-      channels: (map['channels'] as String)
-          .split(',')
-          .where((c) => c.isNotEmpty)
-          .map(AlertChannel.fromString)
-          .toList(),
+      channels: AlertChannel.parseList(map['channels'] as String?),
       sentAt: map['sent_at'] as String,
       recipients: map['recipients'] as int? ?? 0,
       createdBy: map['created_by'] as String,

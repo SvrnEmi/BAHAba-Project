@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -28,14 +27,15 @@ Future<void> main() async {
     debugPrint('Firebase init failed, continuing without push: $error\n$stack');
   }
 
-  await dotenv.load(fileName: '.env');
+  // From the build: --dart-define-from-file=.env (or --dart-define).
+  // Only the publishable key belongs here, never a service-role key.
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabasePublishableKey =
+      String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'];
-  final supabasePublishableKey = dotenv.env['SUPABASE_PUBLISHABLE_KEY'];
-
-  if (supabaseUrl == null || supabasePublishableKey == null) {
-    throw StateError(
-        'Missing Supabase environment values. Check the app .env file.');
+  if (supabaseUrl.isEmpty || supabasePublishableKey.isEmpty) {
+    throw StateError('Missing Supabase values. Build with '
+        '--dart-define-from-file=.env (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY).');
   }
 
   await Supabase.initialize(

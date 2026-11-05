@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../repositories/barangay_repository.dart';
 import '../services/quick_report_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay_container.dart';
@@ -29,6 +30,7 @@ class _QuickReportScreenState extends State<QuickReportScreen> {
   _Phase _phase = _Phase.loading;
   String? _statusError;
   QuickReportStatus? _status;
+  String? _blockedMessage;
   int _remainingAfterSend = 0;
   bool _photoFailed = false;
   int _formKey = 0; // new form after "Send another"
@@ -105,13 +107,14 @@ class _QuickReportScreenState extends State<QuickReportScreen> {
       case _Phase.ready:
         final status = _status!;
         if (status.blocked) {
-          return const [
+          return [
             _Notice(
               tone: _Tone.error,
-              text: 'This device can no longer send Quick Reports. Please call the MDRRMO or 911.',
+              text: _blockedMessage ??
+                  'This device can no longer send Quick Reports. Please call the MDRRMO or 911.',
             ),
-            SizedBox(height: 16),
-            HotlineButtons(),
+            const SizedBox(height: 16),
+            const HotlineButtons(),
           ];
         }
         if (status.remaining <= 0) {
@@ -135,7 +138,8 @@ class _QuickReportScreenState extends State<QuickReportScreen> {
               _photoFailed = photoFailed;
               _phase = _Phase.sent;
             }),
-            onBlocked: () => setState(() {
+            onBlocked: (message) => setState(() {
+              _blockedMessage = message;
               _status = QuickReportStatus(max: status.max, remaining: status.remaining, blocked: true);
             }),
           ),
@@ -194,7 +198,7 @@ class _QuickReportScreenState extends State<QuickReportScreen> {
 class _ReportForm extends StatefulWidget {
   final int remaining;
   final void Function(int remaining, bool photoFailed) onSent;
-  final VoidCallback onBlocked;
+  final ValueChanged<String> onBlocked;
 
   const _ReportForm({
     super.key,
@@ -218,7 +222,7 @@ class _ReportFormState extends State<_ReportForm> {
   final _website = TextEditingController();
 
   WaterLevel? _level;
-  List<String> _barangays = QuickReportService.fallbackBarangays;
+  List<String> _barangays = BarangayRepository.currentNames;
   String? _barangay;
   Position? _position;
   bool _locating = false;
@@ -234,7 +238,8 @@ class _ReportFormState extends State<_ReportForm> {
   @override
   void initState() {
     super.initState();
-    _service.barangays().then((names) {
+    // Signed out, RLS hides the table, so this usually stays on the official list.
+    BarangayRepository.names().then((names) {
       if (mounted) setState(() => _barangays = names);
     });
   }
@@ -389,7 +394,7 @@ class _ReportFormState extends State<_ReportForm> {
     } on QuickReportException catch (e) {
       if (!mounted) return;
       if (e.code == 'blocked') {
-        widget.onBlocked();
+        widget.onBlocked(e.message);
         return;
       }
       setState(() => _error = e.message);

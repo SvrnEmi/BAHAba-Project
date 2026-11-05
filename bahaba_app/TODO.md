@@ -9,7 +9,7 @@
 ## Sprint 1 — Data Layer
 - [x] Models: Barangay, Alert, CommunityReport, User, AuditLog
 - [x] SQLite database schema + helper (`DatabaseHelper`)
-- [x] Seed data: 9 barangays with real GIS coordinates, default users, sample alerts/reports
+- [x] Seed data: the 25 official barangays (map cache, replaced from Supabase), default users, sample alerts/reports
 - [x] Repositories (auth, barangay, alert, report, audit)
 
 ## Sprint 2 — Auth & Onboarding

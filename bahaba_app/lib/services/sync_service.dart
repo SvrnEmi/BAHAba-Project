@@ -13,7 +13,7 @@ class SyncService {
   static final SyncService instance = SyncService._();
 
   final DatabaseHelper _db = DatabaseHelper.instance;
-  final SupabaseClient _client = Supabase.instance.client;
+  SupabaseClient get _client => Supabase.instance.client;
   final Connectivity _connectivity = Connectivity();
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
@@ -119,7 +119,7 @@ class SyncService {
       final payload = {
         'id': id,
         'action': row['action'],
-        'user': row['user'],
+        'user_name': row['user'],
         'timestamp': row['timestamp'],
         'details': row['details'],
       };
@@ -141,11 +141,7 @@ class SyncService {
         title: payload['title'] as String? ?? '',
         message: payload['message'] as String? ?? '',
         targetBarangay: payload['target_barangay'] as String? ?? '',
-        channels: (payload['channels'] as String? ?? '')
-            .split(',')
-            .where((c) => c.isNotEmpty)
-            .map(AlertChannel.fromString)
-            .toList(),
+        channels: AlertChannel.parseList(payload['channels'] as String?),
         sentAt: payload['sent_at'] as String? ?? DateTime.now().toIso8601String(),
         recipients: payload['recipients'] as int? ?? 0,
         createdBy: payload['created_by'] as String? ?? 'system',
@@ -208,7 +204,7 @@ class SyncService {
       final log = AuditLog(
         id: payload['id'] as int?,
         action: payload['action'] as String? ?? '',
-        user: payload['user'] as String? ?? '',
+        user: payload['user_name'] as String? ?? '',
         timestamp: payload['timestamp'] as String? ?? DateTime.now().toIso8601String(),
         details: payload['details'] as String? ?? '',
       );

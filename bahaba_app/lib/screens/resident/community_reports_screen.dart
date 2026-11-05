@@ -15,6 +15,7 @@ import '../../widgets/clay_container.dart';
 import '../../widgets/flat_status_card.dart';
 import '../../widgets/report_messages_section.dart';
 import '../../widgets/report_status_badge.dart';
+import '../../widgets/review_reason.dart';
 import '../../widgets/screen_header.dart';
 
 /// Community Reports screen — submit flood observations with GPS + photo.
@@ -539,7 +540,7 @@ class _ErrorBox extends StatelessWidget {
   }
 }
 
-class _ReportCard extends StatelessWidget {
+class _ReportCard extends StatefulWidget {
   final CommunityReport report;
 
   /// Own reports: the Messages thread (which also shows the old reply).
@@ -547,6 +548,19 @@ class _ReportCard extends StatelessWidget {
 
   const _ReportCard(
       {super.key, required this.report, this.showMessages = false});
+
+  @override
+  State<_ReportCard> createState() => _ReportCardState();
+}
+
+/// Collapsed by default: status, location, water level and time stay
+/// visible (plus the review reason); the description, reply and message
+/// thread open with "Show details".
+class _ReportCardState extends State<_ReportCard> {
+  bool _open = false;
+
+  CommunityReport get report => widget.report;
+  bool get showMessages => widget.showMessages;
 
   @override
   Widget build(BuildContext context) {
@@ -619,23 +633,6 @@ class _ReportCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(report.description,
-              style: const TextStyle(fontSize: 13, height: 1.4)),
-          if (report.status == ReportStatus.rejected &&
-              report.rejectionReason != null &&
-              report.rejectionReason!.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Reason: ${report.rejectionReason}',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-          const SizedBox(height: 8),
           Row(
             children: [
               const Icon(Icons.water_drop,
@@ -645,7 +642,57 @@ class _ReportCard extends StatelessWidget {
                   style: const TextStyle(fontSize: 12)),
             ],
           ),
-          if (showMessages && report.id != null)
+          ReviewReason(report: report),
+          Semantics(
+            button: true,
+            expanded: _open,
+            child: InkWell(
+              onTap: () => setState(() => _open = !_open),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Row(
+                  children: [
+                    Text(
+                      _open ? 'Hide details' : 'Show details',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    Icon(_open ? Icons.expand_less : Icons.expand_more,
+                        color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_open) ...[
+            Text(report.description,
+                style: const TextStyle(fontSize: 13, height: 1.4)),
+            if ((report.photoPath ?? '').startsWith('http'))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    report.photoPath!,
+                    width: 128,
+                    height: 96,
+                    cacheWidth: 256,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Photo sent with the report',
+                    errorBuilder: (_, __, ___) => const Text(
+                        'Photo unavailable',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                  ),
+                ),
+              ),
+          ],
+          if (!_open)
+            const SizedBox.shrink()
+          else if (showMessages && report.id != null)
             ReportMessagesSection(
               key: ValueKey('messages-${report.id}'),
               reportId: report.id!,

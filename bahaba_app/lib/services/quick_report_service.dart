@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/seed_data.dart';
 
 /// Quick Report: anonymous flood reports through the "quick-report" Edge
 /// Function (no login). Limits (3 per device), IP limits and blocking are
@@ -83,27 +82,6 @@ class QuickReportService {
     }
   }
 
-  /// Barangay names from the table when readable without login; otherwise
-  /// [fallbackBarangays].
-  Future<List<String>> barangays() async {
-    try {
-      final rows = await _client.from('barangays').select('name').order('name');
-      final names = rows
-          .map((r) => (r['name'] ?? '').toString().trim())
-          .where((n) => n.isNotEmpty)
-          .toList();
-      if (names.isNotEmpty) return names;
-    } catch (e) {
-      debugPrint('Barangay list not readable without login: $e');
-    }
-    return fallbackBarangays;
-  }
-
-  /// TODO: replace with the official list of the 25 Odiongan barangays (names
-  /// must match barangays.name exactly, or the server answers "Unknown barangay").
-  static final List<String> fallbackBarangays =
-      (SeedData.barangays.map((b) => b.name).toList()..sort());
-
   Future<Map<String, dynamic>> _invoke(Map<String, dynamic> body) async {
     final payload = {'device_id': await deviceId(), ...body};
     try {
@@ -114,8 +92,8 @@ class QuickReportService {
       if (data is Map) return Map<String, dynamic>.from(data);
       throw const QuickReportException(_generic);
     } on FunctionException catch (e) {
-      final details = e.details;
-      if (details is Map && details['error'] != null) throw _fromBody(details);
+      final error = errorFromDetails(e.details);
+      if (error != null) throw error;
       debugPrint('quick-report failed: ${e.status} ${e.reasonPhrase}');
       throw const QuickReportException(_generic);
     } on QuickReportException {
@@ -136,10 +114,26 @@ class QuickReportService {
     'busy': 'The service is busy right now. Please try again in a minute.',
   };
 
+  /// The error in a failed call's body: JSON from the function or gateway, or
+  /// short plain text (never an HTML page). Null when there is none to show.
+  static QuickReportException? errorFromDetails(Object? details) {
+    if (details is Map && (details['error'] ?? details['message']) != null) {
+      return _fromBody(details);
+    }
+    if (details is String) {
+      final text = details.trim();
+      if (text.isNotEmpty && text.length <= 200 && !text.startsWith('<')) {
+        return QuickReportException(text);
+      }
+    }
+    return null;
+  }
+
   /// The function's own error text is user-facing; known codes get our wording if it is missing.
-  QuickReportException _fromBody(Map body) {
+  static QuickReportException _fromBody(Map body) {
     final code = body['code'] is String ? body['code'] as String : null;
-    final text = body['error'] is String ? (body['error'] as String).trim() : '';
+    final message = body['error'] ?? body['message'];
+    final text = message is String ? message.trim() : '';
     return QuickReportException(
       text.isNotEmpty ? text : (_friendly[code] ?? _generic),
       code: code,

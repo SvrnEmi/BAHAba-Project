@@ -105,10 +105,15 @@ class AlertLevelBadge extends StatelessWidget {
 
   const AlertLevelBadge({super.key, required this.level, this.compact = false});
 
+  // PAGASA colors; the badge always carries the text label too.
+  static const pagasaYellow = Color(0xFFF2C200);
+  static const pagasaOrange = Color(0xFFE8730C);
+  static const pagasaRed = Color(0xFFC0392B);
+
   static Color colorFor(AlertLevel level) => switch (level) {
-        AlertLevel.advisory => AppColors.info,
-        AlertLevel.warning => AppColors.warning,
-        AlertLevel.critical => AppColors.danger,
+        AlertLevel.advisory => pagasaYellow,
+        AlertLevel.warning => pagasaOrange,
+        AlertLevel.critical => pagasaRed,
       };
 
   @override
@@ -119,7 +124,7 @@ class AlertLevelBadge extends StatelessWidget {
       AlertLevel.critical => Icons.warning_rounded,
     };
     return SolidBadge(
-      label: level.label,
+      label: level.pagasaText,
       color: colorFor(level),
       icon: icon,
       compact: compact,

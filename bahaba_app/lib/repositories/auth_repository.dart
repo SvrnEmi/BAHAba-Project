@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 import '../models/user_model.dart' as app_user;
 
@@ -71,6 +72,13 @@ class AuthRepository {
       throw AuthException('Registration failed. Please try again.');
     }
 
+    if (isDuplicateSignUp(response.session, response.user!)) {
+      throw const supa.AuthException(
+        'User already registered',
+        code: 'user_already_exists',
+      );
+    }
+
     // If email confirmation is required, there is no session yet.
     // Do NOT try to write to `profiles` now — it will fail RLS.
     if (response.session == null) {
@@ -96,6 +104,14 @@ class AuthRepository {
     await _saveSession(created);
     return created;
   }
+
+  /// With "Confirm email" on, Supabase hides existing accounts: signUp returns
+  /// no error, just a placeholder user with no identities and no session.
+  static bool isDuplicateSignUp(Session? session, User user) =>
+      session == null && (user.identities?.isEmpty ?? false);
+
+  Future<void> sendPasswordReset(String email) =>
+      _client.auth.resetPasswordForEmail(email.trim());
 
   Future<app_user.User?> getCurrentUser() async {
     final session = _client.auth.currentSession;

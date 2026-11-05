@@ -10,6 +10,7 @@ import '../../providers/app_state.dart';
 import '../../repositories/alert_repository.dart';
 import '../../repositories/barangay_repository.dart';
 import '../../repositories/report_repository.dart';
+import '../../services/app_update_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/profile_avatar_button.dart';
@@ -19,7 +20,7 @@ import '../../widgets/risk_badge.dart';
 import '../../widgets/brand_logo.dart';
 
 /// Barangay admin dashboard, mirroring the web BarangayAdminDashboard:
-/// stats, water level controls, alert submission to MDRRMO, alert history
+/// stats, water level controls, alert publishing, alert history
 /// and community reports.
 class BarangayAdminDashboardScreen extends StatefulWidget {
   const BarangayAdminDashboardScreen({super.key});
@@ -63,6 +64,7 @@ class _BarangayAdminDashboardScreenState
   @override
   void initState() {
     super.initState();
+    AppUpdateService.instance.attachHome();
     _barangayName = context.read<AppState>().currentUser?.barangay;
     final name = _barangayName;
     if (name == null || name.isEmpty) {
@@ -83,6 +85,7 @@ class _BarangayAdminDashboardScreenState
 
   @override
   void dispose() {
+    AppUpdateService.instance.detachHome();
     _barangaySub?.cancel();
     _tabController.dispose();
     _titleController.dispose();
@@ -150,7 +153,7 @@ class _BarangayAdminDashboardScreenState
 
     setState(() => _submitting = true);
     try {
-      final alert = await _alertRepository.submitForVerification(
+      final alert = await _alertRepository.publishBarangayAlert(
         level: _newLevel,
         title: title,
         message: message,
@@ -165,9 +168,9 @@ class _BarangayAdminDashboardScreenState
       });
       _titleController.clear();
       _messageController.clear();
-      _showSnack('Alert submitted to MDRRMO for verification!');
+      _showSnack('Alert published to your barangay.');
     } catch (error) {
-      _showSnack('Unable to submit alert: $error');
+      _showSnack('Unable to publish alert: $error');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -348,7 +351,7 @@ class _BarangayAdminDashboardScreenState
           const _NoteBanner(
             color: AppColors.secondary,
             text:
-                'All alerts you create will be sent to MDRRMO Admin for verification before being broadcast to residents.',
+                'Alerts you publish go straight to residents of your barangay (up to 5 per hour).',
           ),
           const SizedBox(height: 16),
           _WaterLevelStatusSection(
@@ -528,7 +531,7 @@ class _BarangayAdminDashboardScreenState
                             strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.send),
-                label: const Text('Submit to MDRRMO'),
+                label: const Text('Publish Alert'),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
@@ -562,7 +565,7 @@ class _BarangayAdminDashboardScreenState
           else if (_alerts.isEmpty)
             const _EmptyState(
               icon: Icons.notifications_none,
-              message: 'No alerts yet. Alerts you submit will appear here.',
+              message: 'No alerts yet. Alerts you publish will appear here.',
             )
           else
             for (final alert in _alerts)
@@ -843,9 +846,10 @@ class _AlertCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (statusLabel, statusColor) = switch (alert.status) {
-      AlertStatus.approved => ('Approved', AppColors.success),
-      AlertStatus.pending => ('Pending MDRRMO Verification', AppColors.warning),
+      AlertStatus.approved => ('Published', AppColors.success),
+      AlertStatus.pending => ('Not published', AppColors.warning),
       AlertStatus.rejected => ('Rejected', AppColors.danger),
+      AlertStatus.withdrawn => ('Withdrawn', AppColors.textSecondary),
     };
 
     // Alert items: flat card, strong left border in the level color.
@@ -895,13 +899,6 @@ class _AlertCard extends StatelessWidget {
                 'Rejection Reason: ${alert.rejectionReason}',
                 style: const TextStyle(fontSize: 12, color: AppColors.danger),
               ),
-            ),
-          ],
-          if (alert.status == AlertStatus.approved) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Verified by: MDRRMO Admin',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ],
         ],

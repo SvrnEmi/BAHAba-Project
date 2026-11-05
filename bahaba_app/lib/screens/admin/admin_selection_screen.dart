@@ -49,7 +49,7 @@ class AdminSelectionScreen extends StatelessWidget {
                 color: AppColors.primary,
                 features: const [
                   'System-wide oversight',
-                  'Verify barangay alerts',
+                  'Oversee barangay alerts',
                   'Verify community reports',
                   'View all barangays',
                   'System analytics',
@@ -108,7 +108,7 @@ class AdminSelectionScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'MDRRMO Admin: Full system access with verification authority over all barangay alerts and community reports.',
+                      'MDRRMO Admin: Full system access: oversees all barangay alerts (edit, withdraw, republish) and verifies community reports.',
                       style: TextStyle(
                         color: AppColors.primary,
                         fontSize: 13,
@@ -117,7 +117,7 @@ class AdminSelectionScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Barangay Admin: Limited to managing a specific barangay. Alerts require MDRRMO verification before broadcast.',
+                      'Barangay Admin: Limited to managing a specific barangay. Publishes alerts directly to its residents.',
                       style: TextStyle(
                         color: AppColors.riskLow,
                         fontSize: 13,

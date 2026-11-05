@@ -115,6 +115,10 @@ class CommunityReport {
   final String? adminReply;
   final String? adminReplyAt;
 
+  /// Why the barangay or MDRRMO approved the report. Supabase only (not in
+  /// the local SQLite cache, so not in toMap).
+  final String? approvalReason;
+
   const CommunityReport({
     this.id,
     required this.userName,
@@ -129,6 +133,7 @@ class CommunityReport {
     this.rejectionReason,
     this.adminReply,
     this.adminReplyAt,
+    this.approvalReason,
   });
 
   Map<String, dynamic> toMap() {

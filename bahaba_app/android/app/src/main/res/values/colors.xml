@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- BAHAba brand blue -->
-    <color name="launch_background">#2563EB</color>
+    <!-- Same as AppColors.background, so the launch screen blends into the splash -->
+    <color name="launch_background">#EAF1F8</color>
 </resources>
-	<color name="ic_launcher_background">#0E93AE</color>

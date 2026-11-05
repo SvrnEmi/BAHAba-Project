@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/alert_model.dart';
 import '../models/user_model.dart';
 import '../providers/resident_providers.dart';
 import 'alerts_seen_store.dart';
@@ -162,9 +163,21 @@ class PushNotificationService {
   // ---------------------------------------------------------------------------
 
   Future<void> _showForeground(RemoteMessage message) async {
-    final title = message.notification?.title ?? message.data['title'];
+    final rawTitle = message.notification?.title ?? message.data['title'];
     final body = message.notification?.body ?? message.data['body'];
-    if (title == null && body == null) return;
+    if (rawTitle == null && body == null) return;
+
+    // Show the PAGASA color and label with the title ("[Orange - Be
+    // Prepared] ..."), unless the server already put it there.
+    final level = message.data['level'];
+    final pagasa = level is String && level.isNotEmpty
+        ? AlertLevel.fromString(level).pagasaText
+        : null;
+    final title = rawTitle == null ||
+            pagasa == null ||
+            rawTitle.toString().contains(pagasa)
+        ? rawTitle
+        : '[$pagasa] $rawTitle';
 
     final critical = message.data['level'] == 'critical';
     try {

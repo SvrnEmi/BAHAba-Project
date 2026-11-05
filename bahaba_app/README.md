@@ -15,14 +15,14 @@ This is the Flutter (Android) version of the BAHAba Prototype. The web prototype
 
 **Admin Apps**
 - Admin Selection — choose MDRRMO or Barangay role
-- MDRRMO Dashboard — system stats, analytics charts (fl_chart), ISO-standard alert levels (Advisory/Warning/Critical), multi-channel broadcast (Push/SMS/Facebook/X), verify barangay alerts, audit trail
+- MDRRMO Dashboard — system stats, analytics charts (fl_chart), ISO-standard alert levels (Advisory/Warning/Critical), push and SMS alert broadcast, verify barangay alerts, audit trail
 - Barangay Dashboard — create alerts, submit to MDRRMO for verification, view barangay reports
 
 ## Data and Authentication
 Authentication is handled by Supabase Auth. Resident profile data is stored in the Supabase `profiles` table. When email confirmation is enabled, registration asks the user to confirm their email before the first sign-in; the profile is created from the saved Auth metadata after confirmation.
 
 Mobile domain data is also stored in a temporary local SQLite database via `sqflite`. It is seeded on first launch with:
-- 9 barangays with real GIS coordinates for Odiongan, Romblon
+- The 25 official barangays of Odiongan, Romblon, read from the Supabase `barangays` table (offline fallback: `lib/config/barangays.dart`)
 - Default users:
   - `resident@bahaba.app` / `resident123` (Resident)
   - `mdrrmo@bahaba.app` / `mdrrmo123` (MDRRMO Admin)
@@ -40,7 +40,8 @@ Mobile domain data is also stored in a temporary local SQLite database via `sqfl
 ### Prerequisites
 1. Install the Flutter SDK: https://docs.flutter.dev/get-started/install
 2. Install Android Studio + Android SDK (API 34)
-3. Create `bahaba_app/.env` with `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
+3. Create `bahaba_app/.env` with `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (publishable key only, never a service-role key). It is passed in at build time with `--dart-define-from-file=.env`, not bundled.
+4. Put the Firebase config for `com.bahaba.app` at `android/app/google-services.json` (not committed).
 
 ### Run
 ```bash
@@ -53,7 +54,10 @@ flutter create --platforms=android .
 flutter pub get
 
 # Launch on connected Android device/emulator
-flutter run
+flutter run --dart-define-from-file=.env
+
+# Release APK
+flutter build apk --release --dart-define-from-file=.env
 ```
 
 ## Project Structure

@@ -15,13 +15,14 @@ import '../../services/alerts_seen_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/report_display.dart';
 import '../../widgets/alert_card.dart';
+import '../rainfall_info_screen.dart';
+import '../../widgets/baha_countdown_card.dart';
+import '../../widgets/info_tip.dart';
 import '../../widgets/clay_button.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/profile_avatar_button.dart';
 import '../../widgets/risk_badge.dart';
-import 'hazard_map_screen.dart';
-import 'alerts_screen.dart';
-import 'community_reports_screen.dart';
+import 'main_shell.dart';
 
 /// Resident home screen: current flood status + quick access.
 class HomeScreen extends StatelessWidget {
@@ -34,15 +35,10 @@ class HomeScreen extends StatelessWidget {
     debugPrint(
         '[BAHAba] Resident profiles.barangay: "${residentBarangay ?? '<null>'}"');
 
-    void openMap() => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const HomeMapView()),
-        );
-    void openAlerts() => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const HomeAlertsView()),
-        );
-    void openReports() => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const HomeReportsView()),
-        );
+    // Same as the bottom nav: switch tabs, never push a second copy.
+    void openMap() => MainShell.selectTab(context, MainShell.mapTab);
+    void openAlerts() => MainShell.selectTab(context, MainShell.alertsTab);
+    void openReports() => MainShell.selectTab(context, MainShell.reportsTab);
 
     final fullName = appState.currentUser?.fullName.trim() ?? '';
     final firstName = fullName.isEmpty ? 'there' : fullName.split(' ').first;
@@ -97,6 +93,9 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             _ResidentStatusCard(barangayName: residentBarangay),
 
+            const SizedBox(height: 16),
+            BahaCountdownCard(barangayName: residentBarangay),
+
             const SizedBox(height: 20),
             Row(
               children: [
@@ -127,6 +126,9 @@ class HomeScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
             const _LatestAlert(),
+            const SizedBox(height: 24),
+            // Short "How rainfall risk works" with a link to the full screen
+            const RainfallInfoShortCard(),
           ],
         ),
       ),
@@ -612,7 +614,18 @@ class _ResidentStatusCardState extends State<_ResidentStatusCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _label,
+                const Row(
+                  children: [
+                    Expanded(child: _label),
+                    InfoTip(
+                      label: 'Your barangay',
+                      text: 'The flood risk level for your barangay. It is '
+                          'set from the Open-Meteo rain forecast every 30 '
+                          'minutes, or by the MDRRMO. It is a forecast, not '
+                          'an official PAGASA bulletin.',
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Text(
                   widget.barangayName!,
@@ -657,45 +670,4 @@ String _residentLastUpdate(Object? value) {
     return 'Updated ${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'} ago';
   }
   return 'Updated ${DateFormat('MMM d, y').format(parsed)}';
-}
-
-// Simple wrappers that reuse the full screens for deep links from Home.
-// These allow the Home quick-access cards to open full screens.
-
-class HomeMapView extends StatelessWidget {
-  const HomeMapView({super.key});
-  @override
-  Widget build(BuildContext context) => const HazardMapScreen();
-}
-
-class HomeAlertsView extends StatefulWidget {
-  const HomeAlertsView({super.key});
-
-  @override
-  State<HomeAlertsView> createState() => _HomeAlertsViewState();
-}
-
-class _HomeAlertsViewState extends State<HomeAlertsView> {
-  // Opening Alerts clears the bell badge; marked again on leave so alerts
-  // that arrived while it was open are not counted as unread.
-  @override
-  void initState() {
-    super.initState();
-    AlertsSeenStore.instance.markSeen();
-  }
-
-  @override
-  void dispose() {
-    AlertsSeenStore.instance.markSeen();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => const AlertsScreen();
-}
-
-class HomeReportsView extends StatelessWidget {
-  const HomeReportsView({super.key});
-  @override
-  Widget build(BuildContext context) => const CommunityReportsScreen();
 }

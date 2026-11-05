@@ -7,7 +7,9 @@ import '../../models/community_report_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/admin_providers.dart';
 import '../../providers/app_state.dart';
+import '../../repositories/barangay_repository.dart';
 import '../../repositories/report_repository.dart';
+import '../../services/app_update_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_button.dart';
 import '../../widgets/clay_container.dart';
@@ -16,20 +18,10 @@ import '../../widgets/flat_status_card.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/risk_badge.dart';
 import '../../widgets/brand_logo.dart';
-
-Color _alertLevelColor(AlertLevel level) {
-  switch (level) {
-    case AlertLevel.advisory:
-      return AppColors.secondary;
-    case AlertLevel.warning:
-      return AppColors.riskMedium;
-    case AlertLevel.critical:
-      return AppColors.riskHigh;
-  }
-}
+import 'flood_events_tab.dart';
 
 /// MDRRMO Admin Dashboard — system oversight, analytics, alert broadcast,
-/// barangay alert verification, report verification, and audit trail.
+/// report verification, and audit trail.
 class MDRRMOAdminDashboardScreen extends StatefulWidget {
   const MDRRMOAdminDashboardScreen({super.key});
 
@@ -44,17 +36,15 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
   bool _hasShownPendingSummary = false;
   bool _hasSeededObservedPendingIds = false;
   final Set<int> _seenReportIds = <int>{};
-  final Set<int> _seenAlertIds = <int>{};
 
   // Alert form state
   AlertLevel _alertLevel = AlertLevel.warning;
   String _targetBarangay = 'All Barangays';
+  List<String> _barangays = BarangayRepository.currentNames;
   final _messageController = TextEditingController();
   final Map<AlertChannel, bool> _channels = {
     AlertChannel.push: true,
     AlertChannel.sms: false,
-    AlertChannel.facebook: true,
-    AlertChannel.twitter: false,
   };
 
   // Held so dispose() can stop their live subscriptions without a context.
@@ -64,9 +54,13 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
   @override
   void initState() {
     super.initState();
+    AppUpdateService.instance.attachHome();
     _tabController = TabController(length: 6, vsync: this);
     _alertProvider = context.read<AdminAlertProvider>();
     _reportProvider = context.read<AdminReportProvider>();
+    BarangayRepository.names().then((names) {
+      if (mounted) setState(() => _barangays = names);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _alertProvider.load();
@@ -77,12 +71,8 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
 
   void _showPendingSummaryIfNeeded({
     required int pendingReportsCount,
-    required int pendingAlertsCount,
   }) {
-    if (_hasShownPendingSummary ||
-        (pendingReportsCount == 0 && pendingAlertsCount == 0)) {
-      return;
-    }
+    if (_hasShownPendingSummary || pendingReportsCount == 0) return;
 
     _hasShownPendingSummary = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -93,25 +83,16 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
         builder: (dialogContext) => AlertDialog(
           title: const Text('Pending review'),
           content: Text(
-            'You have $pendingReportsCount pending report(s) and $pendingAlertsCount pending alert(s) awaiting review.',
+            'You have $pendingReportsCount pending report(s) awaiting review.',
           ),
           actions: [
-            if (pendingReportsCount > 0)
-              TextButton(
-                onPressed: () {
-                  _tabController.animateTo(4);
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Review Reports'),
-              ),
-            if (pendingAlertsCount > 0)
-              TextButton(
-                onPressed: () {
-                  _tabController.animateTo(1);
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Review Alerts'),
-              ),
+            TextButton(
+              onPressed: () {
+                _tabController.animateTo(3);
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Review Reports'),
+            ),
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Dismiss'),
@@ -122,21 +103,12 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
     });
   }
 
-  void _registerInitialSeenIds(
-    List<CommunityReport> reports,
-    List<Alert> alerts,
-  ) {
+  void _registerInitialSeenIds(List<CommunityReport> reports) {
     if (_hasSeededObservedPendingIds) return;
 
     for (final report in reports) {
       if (report.id != null) {
         _seenReportIds.add(report.id!);
-      }
-    }
-
-    for (final alert in alerts) {
-      if (alert.id != null) {
-        _seenAlertIds.add(alert.id!);
       }
     }
 
@@ -164,37 +136,7 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
             ),
             action: SnackBarAction(
               label: 'Review',
-              onPressed: () => _tabController.animateTo(4),
-            ),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-      });
-    }
-  }
-
-  void _notifyForNewPendingAlerts(List<Alert> alerts) {
-    final newlyPendingAlerts = alerts
-        .where((alert) =>
-            alert.status == AlertStatus.pending &&
-            alert.id != null &&
-            !_seenAlertIds.contains(alert.id!))
-        .toList();
-
-    for (final alert in newlyPendingAlerts) {
-      if (alert.id == null) continue;
-      _seenAlertIds.add(alert.id!);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'New alert submitted by Barangay ${alert.targetBarangay} — awaiting review.',
-            ),
-            action: SnackBarAction(
-              label: 'Review',
-              onPressed: () => _tabController.animateTo(1),
+              onPressed: () => _tabController.animateTo(3),
             ),
             duration: const Duration(seconds: 8),
           ),
@@ -205,6 +147,7 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
 
   @override
   void dispose() {
+    AppUpdateService.instance.detachHome();
     _alertProvider.stop();
     _reportProvider.stop();
     _tabController.dispose();
@@ -263,22 +206,17 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
     final alertProvider = context.watch<AdminAlertProvider>();
     final reportProvider = context.watch<AdminReportProvider>();
 
-    final pendingAlerts = alertProvider.pendingAlerts.length;
     final pendingReports = reportProvider.pendingCount;
 
     if (!alertProvider.loading &&
         !reportProvider.loading &&
         !_hasSeededObservedPendingIds) {
-      _registerInitialSeenIds(reportProvider.reports, alertProvider.alerts);
+      _registerInitialSeenIds(reportProvider.reports);
     }
 
     if (!alertProvider.loading && !reportProvider.loading) {
       _notifyForNewPendingReports(reportProvider.reports);
-      _notifyForNewPendingAlerts(alertProvider.alerts);
-      _showPendingSummaryIfNeeded(
-        pendingReportsCount: pendingReports,
-        pendingAlertsCount: pendingAlerts,
-      );
+      _showPendingSummaryIfNeeded(pendingReportsCount: pendingReports);
     }
 
     return Scaffold(
@@ -313,11 +251,11 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
           indicatorPadding: const EdgeInsets.symmetric(vertical: 6),
           tabs: const [
             Tab(text: 'Overview'),
-            Tab(text: 'Verify Alerts'),
             Tab(text: 'Analytics'),
             Tab(text: 'Broadcast'),
             Tab(text: 'Verify Reports'),
             Tab(text: 'Audit Trail'),
+            Tab(text: 'Flood Events'),
           ],
         ),
       ),
@@ -325,18 +263,16 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
         controller: _tabController,
         children: [
           _OverviewTab(
-            pendingAlerts: pendingAlerts,
             pendingReports: pendingReports,
-            onVerifyAlerts: () => _tabController.animateTo(1),
-            onVerifyReports: () => _tabController.animateTo(4),
-            onBroadcast: () => _tabController.animateTo(3),
+            onVerifyReports: () => _tabController.animateTo(3),
+            onBroadcast: () => _tabController.animateTo(2),
           ),
-          _VerifyAlertsTab(),
           const _AnalyticsTab(),
           _BroadcastTab(
             level: _alertLevel,
             onLevelChanged: (l) => setState(() => _alertLevel = l),
             targetBarangay: _targetBarangay,
+            barangays: _barangays,
             onTargetChanged: (v) => setState(() => _targetBarangay = v),
             messageController: _messageController,
             channels: _channels,
@@ -346,6 +282,7 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
           ),
           const _VerifyReportsTab(),
           const _AuditTrailTab(),
+          const FloodEventsTab(),
         ],
       ),
     );
@@ -355,16 +292,12 @@ class _MDRRMOAdminDashboardScreenState extends State<MDRRMOAdminDashboardScreen>
 // ---------------- Overview Tab ----------------
 
 class _OverviewTab extends StatelessWidget {
-  final int pendingAlerts;
   final int pendingReports;
-  final VoidCallback onVerifyAlerts;
   final VoidCallback onVerifyReports;
   final VoidCallback onBroadcast;
 
   const _OverviewTab({
-    required this.pendingAlerts,
     required this.pendingReports,
-    required this.onVerifyAlerts,
     required this.onVerifyReports,
     required this.onBroadcast,
   });
@@ -426,46 +359,11 @@ class _OverviewTab extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        // Pending alerts banner: flat, strong left border, bold text.
-        if (pendingAlerts > 0)
-          FlatStatusCard(
-            accent: AppColors.warning,
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.notifications_active, color: AppColors.ink),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '$pendingAlerts pending barangay alerts awaiting your verification',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: onVerifyAlerts,
-                  child: const Text('Review →'),
-                ),
-              ],
-            ),
-          ),
-
         // Recent activity + quick actions
         _SectionCard(
           title: 'Quick Actions',
           child: Column(
             children: [
-              _QuickActionTile(
-                icon: Icons.verified_outlined,
-                color: AppColors.peach,
-                title: 'Verify Barangay Alerts',
-                subtitle: '$pendingAlerts pending verifications',
-                onTap: onVerifyAlerts,
-              ),
               _QuickActionTile(
                 icon: Icons.report_outlined,
                 color: AppColors.lavender,
@@ -484,189 +382,6 @@ class _OverviewTab extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ---------------- Verify Alerts Tab ----------------
-
-class _VerifyAlertsTab extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<AdminAlertProvider>();
-    final appState = context.read<AppState>();
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const FlatPanel(
-          padding: EdgeInsets.all(14),
-          child: Text(
-            'MDRRMO Responsibility: Review and verify alerts created by Barangay Officials before broadcasting to residents.',
-            style: TextStyle(color: AppColors.ink, fontSize: 13),
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (provider.loading)
-          const Center(child: Text('Checking pending alerts...'))
-        else if (provider.pendingAlerts.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(32),
-            child: Center(
-              child: Text(
-                'No pending alerts to verify.',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
-          )
-        else
-          for (final alert in provider.pendingAlerts)
-            // Alert items: flat card, strong left border in the level color.
-            FlatStatusCard(
-              accent: _alertLevelColor(alert.level),
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      AlertLevelBadge(level: alert.level),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          alert.targetBarangay,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    alert.title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    alert.message,
-                    style: const TextStyle(fontSize: 13, height: 1.4),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Created by: ${alert.createdBy} • ${alert.sentAt}',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            backgroundBuilder:
-                                ClayButtonSurface.filled(AppColors.riskLowFill),
-                          ),
-                          onPressed: () async {
-                            await provider.approve(
-                              alert.id!,
-                              appState.currentUser?.fullName ?? 'Admin',
-                            );
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Alert approved and broadcast!',
-                                  ),
-                                  backgroundColor: AppColors.success,
-                                ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.check_circle, size: 18),
-                          label: const Text('Approve & Broadcast'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.danger,
-                            minimumSize: const Size.fromHeight(48),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            backgroundBuilder: ClayButtonSurface.secondary(
-                              borderColor: AppColors.danger,
-                            ),
-                          ),
-                          onPressed: () async {
-                            final reason = await _askRejectReason(context);
-                            if (reason == null || reason.isEmpty) return;
-                            await provider.reject(
-                              alert.id!,
-                              reason,
-                              appState.currentUser?.fullName ?? 'Admin',
-                            );
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Alert rejected.'),
-                                  backgroundColor: AppColors.warning,
-                                ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.cancel, size: 18),
-                          label: const Text('Reject'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-      ],
-    );
-  }
-
-  Future<String?> _askRejectReason(BuildContext context) {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rejection Reason'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Enter reason for rejection...',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -842,6 +557,9 @@ class _BroadcastTab extends StatelessWidget {
   final AlertLevel level;
   final ValueChanged<AlertLevel> onLevelChanged;
   final String targetBarangay;
+
+  /// Barangay names for the target picker ("All Barangays" is added).
+  final List<String> barangays;
   final ValueChanged<String> onTargetChanged;
   final TextEditingController messageController;
   final Map<AlertChannel, bool> channels;
@@ -852,6 +570,7 @@ class _BroadcastTab extends StatelessWidget {
     required this.level,
     required this.onLevelChanged,
     required this.targetBarangay,
+    required this.barangays,
     required this.onTargetChanged,
     required this.messageController,
     required this.channels,
@@ -891,18 +610,10 @@ class _BroadcastTab extends StatelessWidget {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: targetBarangay,
-          items: const [
-            'All Barangays',
-            'Tuburan',
-            'Poctoy',
-            'Gabawan',
-            'Batiano',
-            'Panique',
-            'Libertad',
-            'Canjalon',
-            'Liwayway',
-            'Pit-os',
-          ].map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+          isExpanded: true,
+          items: ['All Barangays', ...barangays]
+              .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+              .toList(),
           onChanged: (v) => onTargetChanged(v ?? 'All Barangays'),
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.location_on_outlined),
@@ -966,10 +677,6 @@ class _BroadcastTab extends StatelessWidget {
         return Icons.smartphone;
       case AlertChannel.sms:
         return Icons.sms_outlined;
-      case AlertChannel.facebook:
-        return Icons.facebook;
-      case AlertChannel.twitter:
-        return Icons.alternate_email;
     }
   }
 
@@ -979,10 +686,6 @@ class _BroadcastTab extends StatelessWidget {
         return AppColors.info;
       case AlertChannel.sms:
         return AppColors.success;
-      case AlertChannel.facebook:
-        return const Color(0xFF1877F2);
-      case AlertChannel.twitter:
-        return const Color(0xFF0EA5E9);
     }
   }
 }

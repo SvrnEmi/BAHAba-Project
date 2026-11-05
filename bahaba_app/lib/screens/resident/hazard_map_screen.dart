@@ -9,9 +9,12 @@ import 'package:geolocator/geolocator.dart';
 import '../../models/barangay_model.dart';
 import '../../providers/resident_providers.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/report_display.dart';
+import '../../widgets/clay_button.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/risk_badge.dart';
 import '../../widgets/screen_header.dart';
+import 'baha_history_screen.dart';
 
 /// GIS Hazard Map using OpenStreetMap (flutter_map).
 /// Shows barangay flood zones as colored circles + markers, and the user's
@@ -27,7 +30,9 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
   static const double _locateZoom = 16;
 
   final MapController _mapController = MapController();
-  final LatLng _center = const LatLng(12.4018, 122.0234);
+  // Midpoint of the barangays; zoom 11.4 fits all of them (Panique to
+  // Progreso Weste) in the 300 px map.
+  final LatLng _center = const LatLng(12.415, 121.99);
   StreamSubscription<Position>? _positionSub;
   Position? _position;
   String? _locationError;
@@ -239,7 +244,7 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
                         mapController: _mapController,
                         options: MapOptions(
                           initialCenter: _center,
-                          initialZoom: 13,
+                          initialZoom: 11.4,
                           interactionOptions: const InteractionOptions(
                               flags: InteractiveFlag.all),
                         ),
@@ -352,6 +357,18 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
                   tooltip: 'Toggle legend',
                   onTap: () => setState(() => _showLegend = !_showLegend),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ClayButton.secondary(
+                    label: 'Baha History',
+                    icon: Icons.history,
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const BahaHistoryScreen(),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -426,10 +443,6 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
                                     children: [
                                       RiskBadge(
                                           risk: b.floodRisk, compact: true),
-                                      Text(
-                                        b.waterLevel,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -739,49 +752,13 @@ class _BarangayDetailSheet extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Stats grid
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.water_drop,
-                    color: AppColors.lavender,
-                    label: 'Water Level',
-                    value: barangay.waterLevel,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.people_outline,
-                    color: AppColors.mint,
-                    label: 'Population',
-                    value: barangay.population,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.campaign,
-                    color: AppColors.peach,
-                    label: 'Evacuated',
-                    value: barangay.evacuated,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.schedule,
-                    color: AppColors.lavender,
-                    label: 'Last Update',
-                    value: barangay.lastUpdate,
-                  ),
-                ),
-              ],
+            _StatCard(
+              icon: Icons.schedule,
+              color: AppColors.lavender,
+              label: 'Last Update',
+              value: relativeTime(barangay.lastUpdate).isEmpty
+                  ? 'Not yet updated'
+                  : relativeTime(barangay.lastUpdate),
             ),
             const SizedBox(height: 20),
 
@@ -810,21 +787,13 @@ class _BarangayDetailSheet extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Approximate barangay centre',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
+                  ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Description
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                barangay.description,
-                style: const TextStyle(fontSize: 14, height: 1.5),
               ),
             ),
             const SizedBox(height: 24),

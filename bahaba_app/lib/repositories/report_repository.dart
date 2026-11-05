@@ -17,11 +17,17 @@ class ReportRepository {
 
   SupabaseClient get _client => Supabase.instance.client;
 
+  /// Explicit columns (never select *).
+  static const columns =
+      'id, user_name, location, lat, lng, water_level, description, status, '
+      'timestamp, photo_path, admin_reply, admin_reply_at, rejection_reason, '
+      'approval_reason';
+
   /// One-shot fetch — use for simple reads where a live stream isn't needed.
   Future<List<CommunityReport>> getAll() async {
     final rows = await _client
         .from('community_reports')
-        .select()
+        .select(columns)
         .order('timestamp', ascending: false);
     return rows.map<CommunityReport>(_fromRow).toList();
   }
@@ -62,7 +68,7 @@ class ReportRepository {
     if (userNames.isEmpty) return [];
     final rows = await _client
         .from('community_reports')
-        .select()
+        .select(columns)
         .inFilter('user_name', userNames)
         .order('timestamp', ascending: false);
     return rows.map<CommunityReport>(_fromRow).toList();
@@ -71,7 +77,7 @@ class ReportRepository {
   Future<List<CommunityReport>> getByStatus(ReportStatus status) async {
     final rows = await _client
         .from('community_reports')
-        .select()
+        .select(columns)
         .eq('status', status.value)
         .order('timestamp', ascending: false);
     return rows.map<CommunityReport>(_fromRow).toList();
@@ -80,7 +86,7 @@ class ReportRepository {
   Future<List<CommunityReport>> getByUserName(String userName) async {
     final rows = await _client
         .from('community_reports')
-        .select()
+        .select(columns)
         .eq('user_name', userName)
         .order('timestamp', ascending: false);
     return rows.map<CommunityReport>(_fromRow).toList();
@@ -107,7 +113,7 @@ class ReportRepository {
           'photo_path': photoPath,
           'status': ReportStatus.pending.value,
         })
-        .select()
+        .select(columns)
         .single();
 
     return _fromRow(row);
@@ -126,7 +132,7 @@ class ReportRepository {
           if (rejectionReason != null) 'rejection_reason': rejectionReason,
         })
         .eq('id', reportId)
-        .select();
+        .select('id');
     debugPrint('Update report $reportId result: $response');
     if (response.isEmpty) {
       throw Exception(
@@ -141,7 +147,7 @@ class ReportRepository {
         .from('community_reports')
         .update({'admin_reply': replyText})
         .eq('id', reportId)
-        .select();
+        .select('id');
 
     if (response.isEmpty) {
       throw Exception(
@@ -156,7 +162,7 @@ class ReportRepository {
         .from('community_reports')
         .delete()
         .eq('id', reportId)
-        .select();
+        .select('id');
     debugPrint('Delete report $reportId result: $response');
     if (response.isEmpty) {
       throw Exception(
@@ -215,5 +221,6 @@ class ReportRepository {
         rejectionReason: row['rejection_reason'] as String?,
         adminReply: row['admin_reply'] as String?,
         adminReplyAt: row['admin_reply_at'] as String?,
+        approvalReason: row['approval_reason'] as String?,
       );
 }

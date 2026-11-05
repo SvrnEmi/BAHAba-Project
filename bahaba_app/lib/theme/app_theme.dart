@@ -90,7 +90,11 @@ class AppColors {
   static Color badgeFill(Color color) => color == riskLow ? riskLowFill : color;
 
   /// Label color that passes AA on [badgeFill] of [color].
-  static Color onBadge(Color color) => color == riskMedium ? ink : Colors.white;
+  /// Light fills (amber, PAGASA yellow and orange) take ink; dark fills white.
+  static Color onBadge(Color color) =>
+      color == riskMedium || badgeFill(color).computeLuminance() > 0.2
+          ? ink
+          : Colors.white;
 }
 
 /// Clay surfaces: one gradient and exactly two outer shadows.

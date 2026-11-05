@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/community_report_model.dart';
+import 'barangay_repository.dart';
 import 'report_repository.dart';
 
 /// Alert-level notification preferences stored in profiles.notification_prefs
@@ -84,10 +85,8 @@ class ProfileRepository {
         .update({'notification_prefs': prefs.toJson()}).eq('id', _userId);
   }
 
-  Future<List<String>> fetchBarangayNames() async {
-    final rows = await _client.from('barangays').select('name').order('name');
-    return rows.map<String>((r) => r['name'] as String).toList();
-  }
+  /// Table names (cached for the session), or the official list offline.
+  Future<List<String>> fetchBarangayNames() => BarangayRepository.names();
 
   /// Throws [ReauthenticationRequired] if Supabase asks for a fresh login.
   Future<void> changePassword(String password) async {

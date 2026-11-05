@@ -16,14 +16,17 @@ import '../widgets/clay_button.dart';
 import '../widgets/clay_container.dart';
 import '../widgets/flat_status_card.dart';
 import '../widgets/profile_avatar_button.dart';
+import '../services/app_update_service.dart';
+import '../widgets/app_release_dialogs.dart';
 import '../widgets/report_messages_section.dart';
 import '../widgets/report_status_badge.dart';
+import '../widgets/review_reason.dart';
 import '../widgets/risk_badge.dart';
 import '../widgets/brand_logo.dart';
 
 /// Collapsible sections of the Profile screen. Pass one as
 /// [ProfileScreen.initialSection] to open it straight away (deep link).
-enum ProfileSection { details, barangay, reports, notifications, password }
+enum ProfileSection { details, barangay, reports, notifications, password, about }
 
 class _Message {
   final bool isError;
@@ -215,6 +218,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               message: _messages[ProfileSection.password],
               report: _reporter(ProfileSection.password),
             ),
+          ),
+          const SizedBox(height: 12),
+          section(
+            ProfileSection.about,
+            icon: Icons.info_outline,
+            title: 'About BAHAba',
+            child: const _AboutApp(),
           ),
           const SizedBox(height: 24),
           const _LogoutButton(),
@@ -813,7 +823,6 @@ class _MyReportItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reason = report.rejectionReason?.trim() ?? '';
     return FlatPanel(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -846,15 +855,7 @@ class _MyReportItem extends StatelessWidget {
               ReportStatusBadge(status: report.status.value),
             ],
           ),
-          if (report.status == ReportStatus.rejected && reason.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Reason: $reason',
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ),
+          ReviewReason(report: report),
           if (report.id != null)
             // The thread also shows the old single reply as its first message.
             ReportMessagesSection(
@@ -1127,6 +1128,81 @@ class _ChangePasswordState extends State<_ChangePassword> {
 // ---------------------------------------------------------------------------
 // Logout (outside the accordion)
 // ---------------------------------------------------------------------------
+
+/// App version and the "What's new" notes for the installed build.
+class _AboutApp extends StatefulWidget {
+  const _AboutApp();
+
+  @override
+  State<_AboutApp> createState() => _AboutAppState();
+}
+
+class _AboutAppState extends State<_AboutApp> {
+  final _updates = AppUpdateService.instance;
+  String? _version;
+  String? _note;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _updates.versionLabel().then((label) {
+      if (mounted) setState(() => _version = label);
+    }).catchError((Object error) {
+      debugPrint('App version unavailable: $error');
+    });
+  }
+
+  Future<void> _showWhatsNew() async {
+    setState(() {
+      _loading = true;
+      _note = null;
+    });
+    String? note;
+    try {
+      final build = await _updates.installedBuild();
+      final release = build == null ? null : await _updates.releaseFor(build);
+      if (!mounted) return;
+      if (release == null) {
+        note = 'No notes have been published for this version yet.';
+      } else {
+        await showWhatsNewDialog(context, release);
+      }
+    } catch (error) {
+      debugPrint("What's new failed: $error");
+      note = "Couldn't load the notes. Check your connection and try again.";
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _note = note;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Version ${_version ?? '...'}',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _showWhatsNew,
+          icon: const Icon(Icons.new_releases_outlined),
+          label: const Text("What's new"),
+        ),
+        if (_note != null) ...[
+          const SizedBox(height: 8),
+          Text(_note!, style: const TextStyle(color: AppColors.textSecondary)),
+        ],
+      ],
+    );
+  }
+}
 
 class _LogoutButton extends StatefulWidget {
   const _LogoutButton();

@@ -1,7 +1,7 @@
 name: bahaba_app
 description: "BAHAba - Community-Centered Flood Communication System"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.2.0+3
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -31,7 +31,6 @@ dependencies:
   fl_chart: ^0.69.0
   # Date formatting
   intl: ^0.19.0
-  flutter_dotenv: ^6.0.1
   supabase_flutter: ^2.17.2
   google_fonts: ^8.2.1
   permission_handler: ^13.0.2
@@ -41,30 +40,21 @@ dependencies:
   url_launcher: ^6.3.3
   # Quick Report device id
   uuid: ^4.5.1
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  # Generates the Android launcher icons: dart run flutter_launcher_icons
-  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
-    - .env
     # Copies of ../terms_of_service.md and ../privacy_policy.md (kept in sync by test/legal_docs_test.dart)
     - assets/legal/
     # BAHAba logo (symbol only, no text): teal tile and bare colour symbol
     - assets/brand/logo-512.png
     - assets/brand/symbol-color-512.png
 
-# Source images live in assets/icon/ (not bundled in the app).
-flutter_launcher_icons:
-  android: true
-  ios: false
-  image_path: "assets/icon/app-icon-1024.png"
-  adaptive_icon_background: "#0E93AE"
-  adaptive_icon_foreground: "assets/icon/icon-foreground-1024.png"
-  min_sdk_android: 21
-
+# Android launcher icons are generated from assets/icon/bahaba-symbol.svg by
+# tool/generate_launcher_icons.mjs (run from the repo root with node).

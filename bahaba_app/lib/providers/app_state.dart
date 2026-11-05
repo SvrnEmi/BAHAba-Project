@@ -60,6 +60,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> sendPasswordReset(String email) =>
+      _authRepository.sendPasswordReset(email);
+
   /// Applies saved profile edits to the in-memory user so screens (e.g. the
   /// Home greeting) update immediately.
   void applyProfileChanges(

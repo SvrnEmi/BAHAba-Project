@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/user_model.dart';
+import '../screens/permissions_screen.dart';
 import '../screens/admin/admin_selection_screen.dart';
 import '../screens/admin/barangay_dashboard_screen.dart';
 import '../screens/admin/mdrrmo_dashboard_screen.dart';
@@ -23,9 +26,29 @@ class AppNavigator {
     }
   }
 
-  /// Navigates the user to the appropriate home screen after login.
+  /// Navigates the user to the appropriate home screen after login. The
+  /// first time, the permission onboarding is shown before home.
   static void goHome(BuildContext context, UserRole role) {
-    Navigator.of(context).pushAndRemoveUntil(
+    unawaited(_goHome(Navigator.of(context), role));
+  }
+
+  static Future<void> _goHome(NavigatorState navigator, UserRole role) async {
+    if (!await PermissionsOnboarding.isDone()) {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => PermissionsScreen(
+            onFinished: (context) => _showHome(Navigator.of(context), role),
+          ),
+        ),
+        (route) => false,
+      );
+      return;
+    }
+    _showHome(navigator, role);
+  }
+
+  static void _showHome(NavigatorState navigator, UserRole role) {
+    navigator.pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => homeForRole(role)),
       (route) => false,
     );

@@ -6,10 +6,10 @@ import '../theme/app_theme.dart';
 import '../utils/navigation.dart';
 import '../widgets/brand_logo.dart';
 import 'welcome_screen.dart';
-import 'permissions_screen.dart';
 
-/// Splash / onboarding screen. Shows the BAHAba branding, then routes
-/// based on whether a session exists.
+/// Brief loading screen (logo only) while the session is restored. Signed-out
+/// users go straight to the Welcome screen, as on the web app; signed-in
+/// users go home (with the one-time permission onboarding first).
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -18,8 +18,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  bool _navigating = false;
-
   @override
   void initState() {
     super.initState();
@@ -34,34 +32,6 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     if (!mounted) return;
-    await _continue();
-  }
-
-  /// Shows first-launch permission onboarding if it hasn't been done yet,
-  /// otherwise goes straight to the normal post-splash route.
-  Future<void> _continue() async {
-    if (_navigating) return;
-    _navigating = true;
-
-    final onboardingDone = await PermissionsOnboarding.isDone();
-    if (!mounted) return;
-
-    if (onboardingDone) {
-      _routeAfterSplash(context);
-    } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => const PermissionsScreen(
-            onFinished: _routeAfterSplash,
-          ),
-        ),
-      );
-    }
-  }
-
-  /// Post-splash routing: home if a session exists, else the Welcome screen.
-  static void _routeAfterSplash(BuildContext context) {
-    final appState = context.read<AppState>();
     if (appState.isLoggedIn) {
       AppNavigator.goHome(context, appState.role!);
     } else {
@@ -73,47 +43,9 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo
-                  const BrandLogo(size: 132),
-                  const SizedBox(height: 28),
-                  Text('BAHAba', style: AppText.heading(size: 40)),
-                  const SizedBox(height: 8),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      'Community-Centered Flood Communication System',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 32),
-              child: ElevatedButton(
-                onPressed: _continue,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(280, 56),
-                ),
-                child: const Text('Get Started'),
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: Center(child: BrandLogo(size: 132)),
     );
   }
 }

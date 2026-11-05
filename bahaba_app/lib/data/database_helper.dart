@@ -17,7 +17,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
 
   static const _dbName = 'bahaba.db';
-  static const _dbVersion = 3;
+  static const _dbVersion = 4;
 
   Database? _database;
 
@@ -44,6 +44,15 @@ class DatabaseHelper {
     }
     if (oldVersion < 3) {
       await _addAdminReplyColumns(db);
+    }
+    if (oldVersion < 4) {
+      // Replace the old 9 sample barangays with the 25 official ones.
+      await db.delete('barangays');
+      final batch = db.batch();
+      for (final brgy in SeedData.barangays) {
+        batch.insert('barangays', {...brgy.toMap()..remove('id'), 'synced': 1});
+      }
+      await batch.commit(noResult: true);
     }
   }
 
@@ -265,8 +274,8 @@ class DatabaseHelper {
 
   Future<List<Barangay>> getBarangays() async {
     final db = await database;
-    final rows = await db.query('barangays', orderBy: 'id ASC');
-    return rows.map(Barangay.fromMap).toList();
+    final rows = await db.query('barangays', orderBy: 'name ASC');
+    return rows.map(Barangay.tryFromMap).whereType<Barangay>().toList();
   }
 
   Future<Barangay?> getBarangayByName(String name) async {
@@ -278,7 +287,7 @@ class DatabaseHelper {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return Barangay.fromMap(rows.first);
+    return Barangay.tryFromMap(rows.first);
   }
 
   Future<Barangay?> getBarangayById(int id) async {
@@ -290,7 +299,22 @@ class DatabaseHelper {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return Barangay.fromMap(rows.first);
+    return Barangay.tryFromMap(rows.first);
+  }
+
+  /// Replaces the cached barangays with [barangays] (from Supabase), so the
+  /// map shows the current list when offline.
+  Future<void> replaceBarangays(List<Barangay> barangays) async {
+    if (barangays.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('barangays');
+      final batch = txn.batch();
+      for (final brgy in barangays) {
+        batch.insert('barangays', {...brgy.toMap()..remove('id'), 'synced': 1});
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   // ---------- Alerts ----------
@@ -302,17 +326,6 @@ class DatabaseHelper {
       orderBy: 'sent_at DESC',
       where: onlyBroadcast ? 'status = ?' : null,
       whereArgs: onlyBroadcast ? [AlertStatus.approved.value] : null,
-    );
-    return rows.map(Alert.fromMap).toList();
-  }
-
-  Future<List<Alert>> getPendingAlerts() async {
-    final db = await database;
-    final rows = await db.query(
-      'alerts',
-      where: 'status = ? AND source = ?',
-      whereArgs: [AlertStatus.pending.value, 'barangay'],
-      orderBy: 'sent_at DESC',
     );
     return rows.map(Alert.fromMap).toList();
   }
@@ -340,20 +353,6 @@ class DatabaseHelper {
       ...alert.toMap()..remove('id'),
       'synced': 0,
     });
-  }
-
-  Future<void> updateAlertStatus(int id, AlertStatus status, {String? rejectionReason}) async {
-    final db = await database;
-    await db.update(
-      'alerts',
-      {
-        'status': status.value,
-        'rejection_reason': rejectionReason,
-        'synced': 0,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
   }
 
   Future<int> alertCount() async {

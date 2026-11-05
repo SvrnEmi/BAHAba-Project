@@ -6,13 +6,13 @@ void main() {
     test('sends only filled fields, the water level id, and an empty honeypot', () {
       final json = const QuickReportInput(
         waterLevel: WaterLevel.overhead,
-        barangay: 'Poblacion',
+        barangay: 'Poctoy',
         landmark: '  ',
         reporterName: ' Juan ',
       ).toJson();
       expect(json, {
         'water_level': 'overhead',
-        'barangay': 'Poblacion',
+        'barangay': 'Poctoy',
         'reporter_name': 'Juan',
         'website': '',
       });

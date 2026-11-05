@@ -15,12 +15,10 @@ class AdminAlertProvider extends ChangeNotifier {
   StreamSubscription<List<Alert>>? _sub;
 
   List<Alert> _alerts = [];
-  List<Alert> _pending = [];
   bool _loading = true;
   String? _error;
 
   List<Alert> get alerts => _alerts;
-  List<Alert> get pendingAlerts => _pending;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -33,9 +31,6 @@ class AdminAlertProvider extends ChangeNotifier {
     _sub = _repo.watchAll().listen(
       (alerts) {
         _alerts = alerts;
-        _pending = alerts
-            .where((alert) => alert.status == AlertStatus.pending)
-            .toList();
         _loading = false;
         notifyListeners();
       },
@@ -66,16 +61,6 @@ class AdminAlertProvider extends ChangeNotifier {
       source: 'mdrrmo',
       recipients: targetBarangay == 'All Barangays' ? 1234 : 500,
     );
-    await load();
-  }
-
-  Future<void> approve(int id, String adminName) async {
-    await _repo.approveAlert(id, adminName);
-    await load();
-  }
-
-  Future<void> reject(int id, String reason, String adminName) async {
-    await _repo.rejectAlert(id, reason, adminName);
     await load();
   }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Map as MapIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { ClayButton } from "./clay/Clay";
 import { BahaHistoryMap } from "./BahaHistoryMap";
+import { FloodEventReport } from "./FloodEventReport";
 import { errorMessage } from "../../lib/barangayAdmin";
 import { deleteFloodEvent, fetchFloodEvents, formatDayTime, saveFloodEvent, type FloodEvent } from "../../lib/floodHistory";
 
@@ -195,6 +196,7 @@ export function FloodEventsPanel() {
                     </button>
                   ))}
                 </div>
+                <FloodEventReport event={e} />
               </li>
             ))}
           </ul>

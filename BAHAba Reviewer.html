@@ -1,0 +1,468 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>BAHAba Reviewer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Layout: sticky tab bar over one-column reading panels; the risk calculator is the single interactive centerpiece. */
+:root{
+  --bg:#EEF4F7; --surface:#FFFFFF; --surface-2:#E3EEF3; --ink:#0B2F45; --ink-2:#4A6572; --line:#CBDCE4;
+  --accent:#0A93AE; --accent-ink:#06687D; --accent-soft:#D3EEF4; --on-accent:#FFFFFF;
+  --low:#2E8B57; --med:#D98E04; --high:#C0392B;
+  --low-bg:#DDF1E5; --low-fg:#1E6B40; --med-bg:#FBEBC8; --med-fg:#7A4F00; --high-bg:#F8D9D5; --high-fg:#98281C;
+  --font-display:"Sora","Trebuchet MS",system-ui,sans-serif;
+  --font-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1A24; --surface:#12283A; --surface-2:#173349; --ink:#E6F2F7; --ink-2:#9DB6C3; --line:#24435A;
+    --accent:#3CC4DE; --accent-ink:#7DDCEE; --accent-soft:#103B4B; --on-accent:#05222B;
+    --low-bg:#123A27; --low-fg:#7FDCA6; --med-bg:#44330A; --med-fg:#F2C063; --high-bg:#4A1E1A; --high-fg:#F29A90;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1A24; --surface:#12283A; --surface-2:#173349; --ink:#E6F2F7; --ink-2:#9DB6C3; --line:#24435A;
+  --accent:#3CC4DE; --accent-ink:#7DDCEE; --accent-soft:#103B4B; --on-accent:#05222B;
+  --low-bg:#123A27; --low-fg:#7FDCA6; --med-bg:#44330A; --med-fg:#F2C063; --high-bg:#4A1E1A; --high-fg:#F29A90;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:900px;margin:0 auto}
+h1,h2,h3{font-family:var(--font-display);line-height:1.2;text-wrap:balance;margin:0}
+h2{font-size:1.35rem;margin-bottom:12px}
+h3{font-size:1.02rem}
+p{margin:0 0 10px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+header{display:flex;gap:14px;align-items:center;padding:22px 0 14px;flex-wrap:wrap}
+header svg{flex:none;width:56px;height:56px;border-radius:14px}
+.title h1{font-size:1.6rem}
+.title p{margin:2px 0 0;color:var(--ink-2);font-size:.95rem}
+.scope{margin-left:auto;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:.82rem;
+  padding:6px 12px;border-radius:999px;letter-spacing:.02em}
+
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;background:transparent;border:1px solid transparent;border-radius:999px;padding:8px 15px;font-weight:600;color:var(--ink-2)}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.tab:not([aria-selected="true"]):hover{background:var(--surface-2)}
+
+main{padding-top:20px}
+section[role="tabpanel"]{display:block}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.stack{display:flex;flex-direction:column;gap:14px}
+.lead{font-size:1.1rem;margin-bottom:16px}
+.k{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:6px;display:block}
+ul.tight{margin:6px 0 0;padding-left:20px}
+ul.tight li{margin:3px 0}
+.btn{background:var(--accent);color:var(--on-accent);border:0;border-radius:10px;padding:9px 16px;font-weight:700}
+.btn.ghost{background:transparent;color:var(--accent-ink);border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--surface-2)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:700}
+.low{background:var(--low-bg);color:var(--low-fg)} .medium{background:var(--med-bg);color:var(--med-fg)} .high{background:var(--high-bg);color:var(--high-fg)}
+.muted{color:var(--ink-2)} .small{font-size:.88rem}
+.pitch{white-space:pre-line}
+
+/* pipeline */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:left;min-width:0}
+.step b{display:block;font-family:var(--font-display);font-size:.98rem}
+.step span{font-size:.8rem;color:var(--ink-2)}
+.step[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+@media (max-width:560px){.steps{grid-template-columns:repeat(2,1fr)}}
+
+/* calculator */
+.calc{display:grid;gap:18px;grid-template-columns:1fr 1fr}
+@media (max-width:700px){.calc{grid-template-columns:1fr}}
+.field label{display:flex;justify-content:space-between;font-weight:600;margin-bottom:6px}
+.field output{font-variant-numeric:tabular-nums;color:var(--accent-ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.ticks{display:flex;justify-content:space-between;font-size:.75rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.result{border-radius:14px;padding:16px;border:2px solid var(--line);background:var(--surface-2)}
+.result .lvl{font-family:var(--font-display);font-size:1.9rem;font-weight:700}
+.meter{height:10px;border-radius:999px;background:var(--line);overflow:hidden;margin:10px 0}
+.meter i{display:block;height:100%;width:33%;background:var(--low);transition:width .25s,background .25s}
+@media (prefers-reduced-motion:reduce){.meter i{transition:none}}
+
+/* roles */
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.two{display:grid;gap:14px;grid-template-columns:1fr 1fr}
+@media (max-width:620px){.two{grid-template-columns:1fr}}
+.can li::marker{color:var(--low)} .cant li::marker{color:var(--high)}
+
+/* checklist */
+.prog{height:12px;border-radius:999px;background:var(--line);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+.group{margin-top:16px}
+.check{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.check input{margin-top:5px;width:18px;height:18px;accent-color:var(--accent);flex:none}
+.check label{cursor:pointer;min-width:0}
+.check small{display:block;color:var(--ink-2)}
+
+/* Q&A */
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.tools input[type=search]{flex:1 1 220px;min-width:0;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.chips button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.85rem;font-weight:600}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+details.q{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin-bottom:8px}
+details.q summary{cursor:pointer;padding:13px 16px;font-weight:700;list-style:none;display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+details.q summary::-webkit-details-marker{display:none}
+details.q summary .cat{flex:none;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink);margin-top:3px}
+details.q[open] summary{border-bottom:1px solid var(--line)}
+.ans{padding:12px 16px 14px}
+.say{font-weight:600;margin-bottom:6px}
+.done{background:var(--low-bg);color:var(--low-fg)}
+.practice{max-width:640px;margin:0 auto;text-align:center}
+.practice .qbig{font-family:var(--font-display);font-size:1.3rem;margin:10px 0 16px}
+.practice .ans{text-align:left;background:var(--surface-2);border-radius:12px;margin-bottom:14px}
+
+/* demo */
+ol.demo{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+ol.demo li{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+ol.demo time{flex:none;font-variant-numeric:tabular-nums;font-weight:700;color:var(--accent-ink);min-width:44px}
+footer{margin-top:28px;color:var(--ink-2);font-size:.85rem}
+</style>
+
+<div class="wrap">
+<header>
+  <svg viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14B4CF"/><stop offset="1" stop-color="#0A6B88"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#g)"/><path d="M108 270 L256 126 L404 270" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><path d="M256 190 C270 212 282 228 282 242 A26 26 0 0 1 230 242 C230 228 242 212 256 190 Z" fill="#fff"/><path d="M96 326 q40 -30 80 0 t80 0 t80 0 t80 0" fill="none" stroke="#9BEBFA" stroke-width="30" stroke-linecap="round"/><path d="M96 392 q40 -30 80 0 t80 0 t80 0 t80 0" fill="none" stroke="#9BEBFA" stroke-opacity=".6" stroke-width="30" stroke-linecap="round"/></svg>
+  <div class="title"><h1>BAHAba Reviewer</h1><p>Flood early warning and community reports for Odiongan, Romblon</p></div>
+  <span class="scope">Odiongan only</span>
+</header>
+
+<nav aria-label="Reviewer sections"><div class="tabs" role="tablist" id="tabs"></div></nav>
+
+<main>
+<!-- OVERVIEW -->
+<section id="p-overview" role="tabpanel" aria-labelledby="t-overview">
+  <p class="lead">BAHAba tells residents of each Odiongan barangay when flood risk is rising, lets anyone report flooding, and gives the MDRRMO one verified place to see and act on it.</p>
+  <div class="grid">
+    <div class="card"><span class="k">Problem</span><p>Floods are local, but warnings are broad or informal (regional bulletins, social media posts, texts). Residents do not get a clear, official message for their barangay, and the MDRRMO has no structured way to collect and verify what is happening on the ground.</p></div>
+    <div class="card"><span class="k">Solution</span><p>Rainfall forecasts are checked for every barangay every 30 minutes. High risk triggers an automatic warning. Residents and guests send reports, and the barangay and MDRRMO verify them. One tap calls the MDRRMO or 911.</p></div>
+    <div class="card"><span class="k">Scope</span><p>Built for the Municipality of Odiongan only: its barangays, its MDRRMO workflow and hotline, and reports limited to the Odiongan area.</p></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <span class="k">30-second pitch</span>
+    <p class="pitch" id="pitchText">When it rains hard in Odiongan, every barangay is affected differently, but warnings arrive late, broad, or by word of mouth.
+BAHAba checks rainfall for each barangay every 30 minutes and warns residents automatically when risk turns high. Anyone can send a flood report without an account, and the MDRRMO verifies it before it counts.
+It is built only for Odiongan, run with the MDRRMO, and it never replaces calling 911 or +63 919 079 8427 in an emergency.</p>
+    <div class="row"><button class="btn" id="copyPitch">Copy pitch</button><span class="muted small" id="copyMsg" aria-live="polite"></span></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <span class="k">What keeps it exclusive to Odiongan</span>
+    <ul class="tight">
+      <li>Only Odiongan barangays are loaded (target: all 25).</li>
+      <li>Quick Report rejects locations outside the Odiongan area.</li>
+      <li>The built-in hotline is the Odiongan MDRRMO.</li>
+      <li>Admin accounts are created only by the system administrator.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="p-how" role="tabpanel" aria-labelledby="t-how" hidden>
+  <h2>How a rainfall forecast becomes a warning</h2>
+  <div class="steps" id="steps"></div>
+  <div class="card" id="stepDetail" aria-live="polite"></div>
+
+  <h2 style="margin-top:26px">Try the risk rule</h2>
+  <div class="card">
+    <div class="calc">
+      <div class="stack">
+        <div class="field"><label for="r3">Worst 3-hour burst <output id="o3">20 mm</output></label>
+          <input id="r3" type="range" min="0" max="120" step="1" value="20">
+          <div class="ticks"><span>0</span><span>30 medium</span><span>60 high</span><span>120</span></div></div>
+        <div class="field"><label for="r24">Rain in 24 hours <output id="o24">40 mm</output></label>
+          <input id="r24" type="range" min="0" max="200" step="1" value="40">
+          <div class="ticks"><span>0</span><span>50 medium</span><span>100 high</span><span>200</span></div></div>
+        <p class="muted small">Default thresholds. The MDRRMO can change them in Settings, and they should be calibrated with local records before real use.</p>
+      </div>
+      <div class="result" id="result" aria-live="polite">
+        <span class="k">Barangay risk level</span>
+        <div class="lvl" id="lvl">Low</div>
+        <div class="meter"><i id="bar"></i></div>
+        <p id="why" class="small"></p>
+        <p id="then" class="small"><b>What happens:</b> <span id="thenTxt"></span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ROLES -->
+<section id="p-roles" role="tabpanel" aria-labelledby="t-roles" hidden>
+  <h2>Who can do what</h2>
+  <div class="seg" id="roleSeg"></div>
+  <div class="card" id="roleCard"></div>
+</section>
+
+<!-- STATUS -->
+<section id="p-status" role="tabpanel" aria-labelledby="t-status" hidden>
+  <h2>Readiness checklist</h2>
+  <p class="muted small">Tick items as you confirm them. Your ticks are kept in this browser only. Backend items start ticked; confirm each screen yourself before the pitch.</p>
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><b id="progTxt">0 of 0 ready</b><button class="btn ghost" id="resetChecks">Reset</button></div>
+    <div class="prog" style="margin-top:8px"><i id="progBar"></i></div>
+    <div id="checks"></div>
+  </div>
+</section>
+
+<!-- Q&A -->
+<section id="p-qa" role="tabpanel" aria-labelledby="t-qa" hidden>
+  <h2>Likely panel questions</h2>
+  <div class="tools">
+    <input type="search" id="qSearch" placeholder="Search questions" aria-label="Search questions">
+    <button class="btn" id="practiceBtn">Practice mode</button>
+  </div>
+  <div class="chips" id="cats" role="group" aria-label="Filter by topic"></div>
+  <p class="muted small" id="qCount" aria-live="polite"></p>
+  <div id="qList"></div>
+  <div id="practice" hidden></div>
+</section>
+
+<!-- DEMO -->
+<section id="p-demo" role="tabpanel" aria-labelledby="t-demo" hidden>
+  <h2>4-minute demo script</h2>
+  <ol class="demo" id="demoList"></ol>
+  <div class="card" style="margin-top:14px"><span class="k">Say this if something fails</span>
+    <p>"Live demos depend on the network. This is why BAHAba keeps the MDRRMO and 911 call buttons one tap away, and why we plan offline support and SMS next."</p></div>
+</section>
+</main>
+
+<footer>Reviewer prepared for the BAHAba pitch. Thresholds and figures are project defaults, not official standards.</footer>
+</div>
+
+<script>
+(function(){
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var store={get:function(k,d){try{var v=localStorage.getItem('bahaba-rev-'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+           set:function(k,v){try{localStorage.setItem('bahaba-rev-'+k,JSON.stringify(v))}catch(e){}}};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+/* ---------- tabs ---------- */
+var TABS=[['overview','Overview'],['how','How it works'],['roles','Roles'],['status','Readiness'],['qa','Pitch Q&A'],['demo','Demo script']];
+var tabsEl=$('#tabs');
+TABS.forEach(function(t){
+  var b=document.createElement('button');b.className='tab';b.id='t-'+t[0];b.setAttribute('role','tab');
+  b.setAttribute('aria-controls','p-'+t[0]);b.textContent=t[1];b.dataset.id=t[0];
+  b.addEventListener('click',function(){show(t[0],true)});tabsEl.appendChild(b);
+});
+tabsEl.addEventListener('keydown',function(e){
+  if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
+  var ids=TABS.map(function(t){return t[0]}),i=ids.indexOf(current());
+  i=(i+(e.key==='ArrowRight'?1:ids.length-1))%ids.length;show(ids[i],true);$('#t-'+ids[i]).focus();
+});
+function current(){var s=$('.tab[aria-selected="true"]');return s?s.dataset.id:'overview'}
+function show(id,save){
+  TABS.forEach(function(t){
+    var sel=t[0]===id;var b=$('#t-'+t[0]);b.setAttribute('aria-selected',sel);b.tabIndex=sel?0:-1;
+    $('#p-'+t[0]).hidden=!sel;
+  });
+  if(save)store.set('tab',id);
+  var b=$('#t-'+id);if(b&&b.scrollIntoView)b.scrollIntoView({block:'nearest',inline:'center'});
+}
+var hash=(location.hash||'').replace('#','');
+show(TABS.some(function(t){return t[0]===hash})?hash:store.get('tab','overview'),false);
+
+/* ---------- pitch copy ---------- */
+$('#copyPitch').addEventListener('click',function(){
+  var t=$('#pitchText').textContent,m=$('#copyMsg');
+  function ok(){m.textContent='Copied'} function fail(){
+    var r=document.createRange();r.selectNodeContents($('#pitchText'));var s=getSelection();s.removeAllRanges();s.addRange(r);m.textContent='Press Ctrl+C to copy the selected text'}
+  try{navigator.clipboard.writeText(t).then(ok,fail)}catch(e){fail()}
+});
+
+/* ---------- pipeline ---------- */
+var STEPS=[
+ ['1 Sense','Forecast + reports','<b>Every 30 minutes</b> the system reads the rainfall forecast (past 24 hours and next 24 hours) for each barangay\'s location from Open-Meteo, a free weather-model service. At any time, residents and guests can also send flood reports with a photo and location.'],
+ ['2 Decide','Risk per barangay','For each barangay it takes the <b>worst 3-hour burst</b> and the <b>24-hour total</b> and compares them with the thresholds. The higher level wins. It also projects +6 h, +12 h and +24 h. A barangay admin can set a level manually; it holds for 6 hours (default) unless ended early. The level waits 3 hours before dropping, so it does not flicker.'],
+ ['3 Alert','Warn the right people','When a barangay reaches <b>High</b>, an automatic warning is published for that barangay and sent as a push notification to its residents (6-hour cooldown to avoid spam). Alerts drafted by barangay admins are reviewed and approved by the MDRRMO first.'],
+ ['4 Respond','Verify and act','Barangay admins and the MDRRMO review reports (approve, reject with a reason, or flag a false report). The MDRRMO replies, approves alerts, and tunes the rules. Residents see the map and call the MDRRMO or 911 in one tap.']
+];
+var stepsEl=$('#steps'),detail=$('#stepDetail'),curStep=0;
+function renderStep(){
+  $$('.step',stepsEl).forEach(function(b,i){b.setAttribute('aria-pressed',i===curStep)});
+  detail.innerHTML='<h3>'+esc(STEPS[curStep][0])+' - '+esc(STEPS[curStep][1])+'</h3><p style="margin-top:8px">'+STEPS[curStep][2]+'</p>';
+}
+STEPS.forEach(function(s,i){var b=document.createElement('button');b.className='step';b.innerHTML='<b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span>';
+  b.addEventListener('click',function(){curStep=i;renderStep()});stepsEl.appendChild(b)});
+renderStep();
+
+/* ---------- risk calculator ---------- */
+var T={m3:30,h3:60,m24:50,h24:100};
+function lvl(v,m,h){return v>=h?2:v>=m?1:0}
+var NAMES=['Low','Medium','High'],CLS=['low','medium','high'],COL=['var(--low)','var(--med)','var(--high)'],
+    THEN=['Monitor only. Normal updates continue.',
+          'The barangay is shown as Medium. The barangay admin can draft an advisory for MDRRMO approval.',
+          'An automatic warning is published for this barangay and sent to its residents by push notification.'];
+function calc(){
+  var a=+$('#r3').value,b=+$('#r24').value;$('#o3').textContent=a+' mm';$('#o24').textContent=b+' mm';
+  var l3=lvl(a,T.m3,T.h3),l24=lvl(b,T.m24,T.h24),l=Math.max(l3,l24);
+  $('#lvl').textContent=NAMES[l];$('#lvl').className='lvl '+CLS[l];
+  var bar=$('#bar');bar.style.width=(l===0?33:l===1?66:100)+'%';bar.style.background=COL[l];
+  $('#result').style.borderColor=COL[l];
+  $('#why').innerHTML='3-hour burst: <span class="pill '+CLS[l3]+'">'+NAMES[l3]+'</span> &nbsp; 24-hour total: <span class="pill '+CLS[l24]+'">'+NAMES[l24]+'</span><br>The higher of the two decides the level.';
+  $('#thenTxt').textContent=THEN[l];
+}
+$('#r3').addEventListener('input',calc);$('#r24').addEventListener('input',calc);calc();
+
+/* ---------- roles ---------- */
+var ROLES=[
+ ['Guest','Quick Report, no account',['Send a flood report without registering (up to 3 per device)','Add a photo, location, landmark, optional name and phone','Call the MDRRMO or 911 in one tap'],['See the map, alerts, or other people\'s reports','Send more than 3 Quick Reports or from outside Odiongan']],
+ ['Resident','Registered user',['See flood risk, forecast and approved alerts for the barangay','Receive push notifications (choose alert levels)','Submit and track community reports','Edit own profile'],['Approve reports or alerts','Change own role or barangay-admin data']],
+ ['Barangay admin','One barangay',['Set the manual flood level for own barangay and return to automatic','Draft alerts for own barangay (MDRRMO approves)','Approve or reject reports from own barangay','Read approved Quick Reports for own barangay'],['Touch other barangays','Approve alerts, reply officially, delete reports','Change settings or manage accounts']],
+ ['MDRRMO admin','Whole municipality',['See and manage all barangays, alerts and reports','Approve or reject alerts and reports; reply officially','Review Quick Reports: approve, reject, or flag as false (blocks the device)','Tune the automatic rules and run the rain simulation for demos','Read the audit log'],['Create or delete accounts','Change roles or passwords']],
+ ['System admin','Separate hidden site',['Create MDRRMO and barangay admin accounts','Delete an account on request','Change roles; reset passwords','Flag or suspend accounts that break the rules; every action is logged'],['Use the flood data or the BAHAba app (it is rejected there)','Act on another system admin or on itself']]
+];
+var roleI=0,seg=$('#roleSeg'),roleCard=$('#roleCard');
+function renderRole(){
+  $$('button',seg).forEach(function(b,i){b.setAttribute('aria-pressed',i===roleI)});
+  var r=ROLES[roleI];
+  roleCard.innerHTML='<h3>'+esc(r[0])+' <span class="muted small">- '+esc(r[1])+'</span></h3><div class="two" style="margin-top:12px"><div><span class="k">Can</span><ul class="tight can">'+r[2].map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul></div><div><span class="k">Cannot</span><ul class="tight cant">'+r[3].map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul></div></div>';
+}
+ROLES.forEach(function(r,i){var b=document.createElement('button');b.textContent=r[0];b.addEventListener('click',function(){roleI=i;renderRole()});seg.appendChild(b)});
+renderRole();
+
+/* ---------- readiness ---------- */
+var CHK=[
+ ['Backend',[
+  ['Risk engine runs every 30 minutes',1,'Forecast, levels, +6/+12/+24 h'],
+  ['Automatic warning when a barangay turns High',1,''],
+  ['Role-based database security',1,'Residents cannot approve their own reports'],
+  ['Quick Report service with the 3-per-device limit',1,''],
+  ['System admin service (accounts, roles, flags)',1,''],
+  ['Push notifications send',0,'Needs the Firebase secret in Supabase']]],
+ ['Web app',[
+  ['Welcome page with Login, Register, Quick Report, hotlines',0,''],
+  ['Quick Report page and MDRRMO review screen',0,''],
+  ['MDRRMO Settings with rainfall forecast',0,''],
+  ['Barangay admin dashboard upgrade',0,''],
+  ['Terms of Service and Privacy Policy pages',0,'Fill in the date and contact email'],
+  ['Deployed on Vercel and checked in a private window',0,'']]],
+ ['Android app',[
+  ['Welcome screen, Quick Report, hotline buttons',0,''],
+  ['Push notifications working on a real phone',0,''],
+  ['New app icon and a fresh APK build',0,''],
+  ['Offline map and data',0,'On hold. Present it as planned.']]],
+ ['Before the pitch',[
+  ['Barangay list matches the 25 official Odiongan barangays',0,''],
+  ['Delete the [DEMO] alerts and test reports',0,''],
+  ['Ask the MDRRMO to check thresholds and the Filipino alert texts',0,''],
+  ['Rehearse the demo once on the real devices',0,'']]]
+];
+var checked=store.get('checks',null);
+if(!checked){checked={};CHK.forEach(function(g,gi){g[1].forEach(function(c,ci){checked[gi+'-'+ci]=!!c[1]})})}
+var checksEl=$('#checks');
+CHK.forEach(function(g,gi){
+  var d=document.createElement('div');d.className='group';d.innerHTML='<h3>'+esc(g[0])+'</h3>';
+  g[1].forEach(function(c,ci){
+    var id='c-'+gi+'-'+ci,w=document.createElement('div');w.className='check';
+    w.innerHTML='<input type="checkbox" id="'+id+'"><label for="'+id+'">'+esc(c[0])+(c[2]?'<small>'+esc(c[2])+'</small>':'')+'</label>';
+    var cb=w.firstChild;cb.checked=!!checked[gi+'-'+ci];
+    cb.addEventListener('change',function(){checked[gi+'-'+ci]=cb.checked;store.set('checks',checked);prog()});
+    d.appendChild(w);
+  });
+  checksEl.appendChild(d);
+});
+function prog(){
+  var all=$$('input[type=checkbox]',checksEl),n=all.filter(function(c){return c.checked}).length;
+  $('#progTxt').textContent=n+' of '+all.length+' ready';$('#progBar').style.width=(all.length?n/all.length*100:0)+'%';
+}
+$('#resetChecks').addEventListener('click',function(){
+  checked={};CHK.forEach(function(g,gi){g[1].forEach(function(c,ci){checked[gi+'-'+ci]=!!c[1]})});store.set('checks',checked);
+  $$('input[type=checkbox]',checksEl).forEach(function(cb){var m=cb.id.split('-');cb.checked=!!checked[m[1]+'-'+m[2]]});prog();
+});
+prog();
+
+/* ---------- Q&A ---------- */
+var QA=[
+ ['Need','Why does Odiongan need this project?','Floods are local, but warnings are broad or informal. BAHAba gives each barangay a clear, official, timely message, and gives the MDRRMO one place to receive and verify reports.',['Barangays can be affected differently by the same rain','Warnings often travel by regional bulletins, social media and word of mouth','Reports reach the MDRRMO in one queue instead of scattered messages']],
+ ['Need','What does each user get out of it?','Residents get warnings and an easy way to report. Barangay admins manage their own area. The MDRRMO gets a verified picture of the whole municipality.',['Resident: risk for my barangay, alerts, one-tap hotlines','Barangay admin: own-barangay level, drafts, report review','MDRRMO: all barangays, approvals, rules, audit log']],
+ ['Edge','What is your edge over existing platforms?','Existing sources cover wide areas or are informal. BAHAba is built only for Odiongan: barangay-level risk, automatic warnings, and reports verified by the MDRRMO, all in one LGU-controlled system.',['Hyperlocal: per barangay, not per province','Automatic: warns without waiting for someone to post','Verified: reports pass barangay and MDRRMO review','Accountable: roles and an audit log','Inclusive: Quick Report needs no account']],
+ ['Edge','Why not just use a Facebook page or Messenger group?','Posts are manual, easy to miss, not targeted to one barangay, and cannot be verified or audited. BAHAba is structured, targeted and accountable.',['No approval workflow or roles on social media','Cannot trigger a warning automatically from rainfall','Misinformation spreads as easily as real alerts']],
+ ['Edge','Is PAGASA or Project NOAH not already doing this?','They are authoritative national sources for weather and hazard maps. They do not give barangay-level community reports or a local alert workflow. BAHAba complements them and does not replace them.',['We use forecast data for Odiongan\'s barangays','Official bulletins stay with PAGASA','Future: show PAGASA advisories inside BAHAba']],
+ ['How it works','How does the system decide a barangay is at risk?','Every 30 minutes it checks the worst 3-hour burst and the 24-hour rainfall for each barangay against thresholds. The higher level wins, and it projects the next 6, 12 and 24 hours.',['Defaults: 3 h medium 30 mm, high 60 mm; 24 h medium 50 mm, high 100 mm','The MDRRMO can change the thresholds','Use the calculator in the How it works tab']],
+ ['How it works','How accurate is it?','It is based on weather-model forecasts, not on-site sensors, so it can be wrong. People remain in the loop: reports, manual levels and MDRRMO review cover the gaps.',['Thresholds are defaults and need calibration with MDRRMO records in a pilot','Next step: rain gauges or water-level sensors','Never presented as a replacement for official bulletins']],
+ ['How it works','What if the barangay admin disagrees with the automatic level?','They can set a level manually. It holds for 6 hours by default, then returns to automatic, and they can end it early. If the automatic forecast is higher, the screen warns them.',['Manual changes are logged','The MDRRMO sees every barangay\'s level']],
+ ['How it works','Who approves alerts, and does that slow things down?','Barangay drafts need MDRRMO approval to prevent false alarms. High-risk automatic warnings are published immediately by default, with a cooldown so residents are not spammed.',['Speed versus false alarms is the MDRRMO\'s choice in Settings','Automatic warnings are marked as automated']],
+ ['Reliability','What if there is no internet, or the system is down, during a typhoon?','Alerts need a data connection, so BAHAba supplements the existing procedures and does not replace them. The hotline buttons are normal phone calls and work without data.',['Planned: offline map and cached data, then SMS alerts','Backup: radio, barangay officials and the MDRRMO hotline +63 919 079 8427']],
+ ['Reliability','What about residents without smartphones?','Quick Report works in any phone browser without an account, hotlines are one tap, and barangay officials can relay messages. SMS is a planned addition.',[]],
+ ['Privacy and abuse','How do you stop fake or prank reports?','Several layers: reports are reviewed before they count, Quick Report is limited, and false reports lead to blocking.',['Quick Report: 3 per device, 10 per day per network, location must be in Odiongan','MDRRMO can flag a false report, which blocks that device','The system admin can flag or suspend an account']],
+ ['Privacy and abuse','How is personal data protected?','We collect only what is needed and follow the Data Privacy Act (RA 10173) principles. Access is limited by role inside the database itself.',['Passwords are hashed; Quick Report photos are private','Device and network identifiers are stored only in scrambled form','Terms of Service and Privacy Policy; admin actions are logged']],
+ ['Privacy and abuse','Who can create admin accounts?','Only the system administrator, through a separate site that is not linked from the app. Nobody can promote themselves, and every action is recorded.',[]],
+ ['Scope','Why only Odiongan? Can it expand?','Exclusive to Odiongan by design: its barangays, MDRRMO workflow, hotline and report area. Focus gives accuracy and accountability. Other municipalities would need their own MDRRMO agreement and data, which is future work.',['Not a general national app','Expansion is outside this project\'s scope']],
+ ['Scope','Who owns and operates it?','The proposal is that the MDRRMO of Odiongan operates it and is responsible for the data. Adoption needs the MDRRMO\'s approval or an agreement.',['The data stays with the municipality','Terms and Privacy are written for that arrangement']],
+ ['Cost and upkeep','How much does it cost, and who maintains it?','The pilot runs on free tiers for hosting, database, push notifications and forecast data. A production deployment should use paid plans for reliability and have a named maintainer.',['Free database tier has a small connection limit; upgrade before real use','Check the forecast provider\'s terms for production use','Account tasks are done in a screen, not in code']],
+ ['Impact','How will you measure success?','By how fast warnings reach residents and how well the MDRRMO uses the reports, measured in a small pilot first.',['Time from risk trigger to alert delivered','Verified reports per week and MDRRMO review time','False-report rate; registered users per barangay','Resident survey on usefulness and trust']],
+ ['Impact','What are the limitations and next steps?','Limits: forecast-based, needs connectivity, thresholds not yet calibrated, barangay areas are approximate points, and success depends on adoption.',['Next: calibrate with MDRRMO records, add barangay boundaries','Then: offline mode, SMS alerts, evacuation centers, sensors']]
+];
+var got=store.get('got',{}),catSel='All',query='',practiceMode=false,pq=null;
+var cats=['All'].concat(QA.map(function(q){return q[0]}).filter(function(c,i,a){return a.indexOf(c)===i}));
+var catsEl=$('#cats');
+cats.forEach(function(c){var b=document.createElement('button');b.textContent=c;b.setAttribute('aria-pressed',c==='All');
+  b.addEventListener('click',function(){catSel=c;$$('button',catsEl).forEach(function(x){x.setAttribute('aria-pressed',x.textContent===c)});list()});catsEl.appendChild(b)});
+$('#qSearch').addEventListener('input',function(e){query=e.target.value.toLowerCase();list()});
+function ansHtml(q){return '<div class="ans"><p class="say">'+esc(q[2])+'</p>'+(q[3].length?'<ul class="tight">'+q[3].map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':'')+'</div>'}
+function list(){
+  var el=$('#qList');el.innerHTML='';var shown=0;
+  QA.forEach(function(q,i){
+    if(catSel!=='All'&&q[0]!==catSel)return;
+    if(query&&(q[1]+' '+q[2]+' '+q[3].join(' ')).toLowerCase().indexOf(query)<0)return;
+    shown++;var d=document.createElement('details');d.className='q';
+    d.innerHTML='<summary><span>'+esc(q[1])+'</span><span class="cat">'+esc(q[0])+'</span></summary>'+ansHtml(q)+
+      '<div class="ans" style="padding-top:0"><button class="btn ghost small" data-i="'+i+'">'+(got[i]?'Marked as practiced':'Mark as practiced')+'</button></div>';
+    $('button',d).addEventListener('click',function(e){got[i]=!got[i];store.set('got',got);e.target.textContent=got[i]?'Marked as practiced':'Mark as practiced';count()});
+    el.appendChild(d);
+  });
+  if(!shown)el.innerHTML='<div class="card muted">No questions match.</div>';
+  count();
+}
+function count(){var n=Object.keys(got).filter(function(k){return got[k]}).length;$('#qCount').textContent=n+' of '+QA.length+' practiced';}
+function nextQ(){
+  var left=QA.map(function(_,i){return i}).filter(function(i){return !got[i]});
+  var box=$('#practice');
+  if(!left.length){box.innerHTML='<div class="card practice"><h3>All '+QA.length+' practiced</h3><p class="muted">Use Reset below to start over.</p><button class="btn ghost" id="resetPr">Reset practice</button></div>';
+    $('#resetPr').addEventListener('click',function(){got={};store.set('got',got);nextQ();count()});return}
+  pq=left[Math.floor(Math.random()*left.length)];var q=QA[pq];
+  box.innerHTML='<div class="card practice"><span class="k">'+esc(q[0])+' - '+left.length+' left</span><div class="qbig">'+esc(q[1])+'</div>'+
+    '<div id="prAns" hidden>'+ansHtml(q)+'<div class="row" style="justify-content:center"><button class="btn" id="prGot">Got it</button><button class="btn ghost" id="prAgain">Ask me again later</button></div></div>'+
+    '<button class="btn" id="prShow">Show answer</button></div>';
+  $('#prShow').addEventListener('click',function(){$('#prAns').hidden=false;this.hidden=true});
+  $('#prGot').addEventListener('click',function(){got[pq]=true;store.set('got',got);count();nextQ()});
+  $('#prAgain').addEventListener('click',nextQ);
+}
+$('#practiceBtn').addEventListener('click',function(){
+  practiceMode=!practiceMode;this.textContent=practiceMode?'Back to the list':'Practice mode';
+  $('#practice').hidden=!practiceMode;$('#qList').hidden=practiceMode;$('#cats').hidden=practiceMode;$('#qSearch').hidden=practiceMode;
+  if(practiceMode)nextQ();else list();
+});
+list();
+
+/* ---------- demo ---------- */
+var DEMO=[
+ ['0:30','Open the welcome page and send a Quick Report as a guest','Show: no account, 3-report limit, hotline buttons.'],
+ ['0:40','MDRRMO screen: review the report','Approve it, then show reject and "flag as false" (explain the device block).'],
+ ['1:00','Start the rain simulation','Map turns High, the automatic [DEMO] warning appears, push arrives on the phone. Stop the simulation afterwards.'],
+ ['0:30','Resident phone: alert and hotline','Show the alert and the one-tap MDRRMO and 911 buttons.'],
+ ['0:30','Barangay admin: manual level, then Return to automatic','Show "Set by you until..." and the warning when the forecast is higher.'],
+ ['0:30','System admin site: create a barangay admin','Mention the separate hidden site and the audit log.'],
+ ['0:30','Close: limits and next steps','Forecast-based, needs connectivity; next are calibration, offline mode, SMS.']
+];
+var dl=$('#demoList');
+DEMO.forEach(function(d){var li=document.createElement('li');li.innerHTML='<time>'+esc(d[0])+'</time><div><b>'+esc(d[1])+'</b><div class="muted small">'+esc(d[2])+'</div></div>';dl.appendChild(li)});
+})();
+</script>
+
+</body></html>

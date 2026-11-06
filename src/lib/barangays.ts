@@ -56,11 +56,6 @@ export function loadBarangayNames(): Promise<string[] | null> {
   return cached;
 }
 
-/** Names from the table, or the official list until (or if never) the table is readable. */
-export async function barangayNamesOrOfficial(): Promise<string[]> {
-  return (await loadBarangayNames()) ?? [...OFFICIAL_BARANGAYS];
-}
-
 /** Barangay names for pickers: the official list at once, the table's list once loaded. */
 export function useBarangayNames(enabled = true): string[] {
   const [names, setNames] = useState<string[]>(() => [...OFFICIAL_BARANGAYS]);

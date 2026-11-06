@@ -1,16 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Bell, CloudRain, Lock, Users, Wrench, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Bell, CloudRain, Lock, Wrench, type LucideIcon } from "lucide-react";
 import { Toaster } from "sonner";
 import { useAuth } from "../../../lib/auth";
 import { AccordionSection } from "../Profile";
 import { AutomationSection } from "./AutomationSection";
-import { UsersSection } from "./UsersSection";
 import { AccountSection, NotificationsSection } from "./NotificationsAccountSections";
 import { SystemSection } from "./SystemSection";
 import { RainfallInfoLink } from "../RainfallInfo";
 
-type SectionId = "automation" | "users" | "notifications" | "account" | "system";
+type SectionId = "automation" | "notifications" | "account" | "system";
 
 /**
  * MDRRMO settings (route guarded to the mdrrmo role). One section open at a
@@ -21,7 +20,6 @@ type SectionId = "automation" | "users" | "notifications" | "account" | "system"
 export function MDRRMOSettings() {
   const navigate = useNavigate();
   const { session } = useAuth();
-  const adminId = session?.user.id ?? "";
   const adminEmail = session?.user.email ?? "MDRRMO Admin";
   const [open, setOpen] = useState<SectionId | null>(null);
   const [opened, setOpened] = useState<Set<SectionId>>(() => new Set());
@@ -62,9 +60,6 @@ export function MDRRMOSettings() {
               <RainfallInfoLink className="mb-2" />
               <AutomationSection adminEmail={adminEmail} />
             </>
-          ))}
-          {section("users", Users, "Users and roles", "Roles", () => (
-            <UsersSection adminId={adminId} adminEmail={adminEmail} />
           ))}
           {section("notifications", Bell, "Notifications for admins", "This browser", () => <NotificationsSection />)}
           {section("account", Lock, "Account", "Password", () => <AccountSection />)}

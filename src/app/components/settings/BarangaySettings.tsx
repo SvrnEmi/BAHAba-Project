@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Bell, CloudRain, Eye, EyeOff, User as UserIcon, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Bell, CloudRain, Eye, EyeOff, Lock, type LucideIcon } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
 import { validateName, validatePhone } from "../../../lib/profile";
@@ -9,7 +9,7 @@ import { ClayButton } from "../clay/Clay";
 import { AccordionSection, FieldError, InlineMessage, LogoutButton, errorText, type Message } from "../Profile";
 import { LoadGate, SwitchRow, num, useSectionLoad } from "./common";
 
-type SectionId = "account" | "notifications" | "automatic";
+type SectionId = "notifications" | "account" | "automatic";
 
 /**
  * Barangay admin settings (route guarded to the barangay role), same layout
@@ -49,8 +49,8 @@ export function BarangaySettings() {
         </div>
 
         <div className="space-y-4">
-          {section("account", UserIcon, "Account", "Details, password", () => <AccountSection />)}
-          {section("notifications", Bell, "Notifications", "This browser", () => <NotificationsSection />)}
+          {section("notifications", Bell, "Notifications for admins", "This browser", () => <NotificationsSection />)}
+          {section("account", Lock, "Account", "Details, password", () => <AccountSection />)}
           {section("automatic", CloudRain, "How the automatic level works", "Read-only", () => <AutomaticSection />)}
         </div>
       </div>
@@ -127,7 +127,7 @@ function DetailsForm({ userId, email, initial }: { userId: string; email: string
         <FieldError text={errors.phone} />
       </label>
       {initial.barangay && (
-        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Barangay: {initial.barangay} (set by MDRRMO)</p>
+        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Barangay: {initial.barangay} (set by the system administrator)</p>
       )}
       <ClayButton className="w-full" onClick={() => void save()} disabled={saving}>
         {saving ? "Saving..." : "Save details"}

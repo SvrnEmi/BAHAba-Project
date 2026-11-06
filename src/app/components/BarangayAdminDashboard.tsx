@@ -501,7 +501,7 @@ export function BarangayAdminDashboard() {
             <div role="alert" className="flat-alert" style={{ "--alert-color": "var(--risk-medium)" } as CSSProperties}>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Your account has no assigned barangay.</p>
               <p className="mt-1 text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                Ask MDRRMO to set your barangay in Users and roles, then reload this page.
+                Ask the system administrator to set your barangay, then reload this page.
               </p>
             </div>
           )}

@@ -330,6 +330,24 @@ test.describe("profile page", () => {
   });
 });
 
+test.describe("Barangay settings", () => {
+  test("lists only the barangay rows, in the MDRRMO order", async ({ page }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await login(page, "barangay");
+    await expect(page).toHaveURL(/\/admin\/barangay$/);
+    await page.goto("/admin/barangay/settings", { waitUntil: "domcontentloaded" });
+
+    const rows = page.locator('button[aria-expanded]');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText("Notifications for admins");
+    await expect(rows.nth(1)).toContainText("Account");
+    await expect(rows.nth(2)).toContainText("How the automatic level works");
+    for (const hidden of ["Users and roles", "Automation and risk rules", "System and demo tools"]) {
+      await expect(page.getByText(hidden)).toHaveCount(0);
+    }
+  });
+});
+
 test.describe("MDRRMO settings", () => {
   test("only MDRRMO can open Settings", async ({ page }) => {
     await page.goto("/admin/mdrrmo/settings", { waitUntil: "domcontentloaded" });
@@ -352,8 +370,10 @@ test.describe("MDRRMO settings", () => {
     await page.goto("/admin/mdrrmo/settings", { waitUntil: "domcontentloaded" });
 
     const header = (name: string) => page.getByRole("button", { name: new RegExp(`^${name}`) });
-    const titles = ["Automation and risk rules", "Users and roles", "Notifications for admins", "Account", "System and demo tools"];
+    const titles = ["Automation and risk rules", "Notifications for admins", "Account", "System and demo tools"];
     for (const t of titles) await expect(header(t)).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: /^(Automation|Notifications|Account|System|Users)/ })).toHaveCount(titles.length);
+    await expect(page.getByText("Users and roles")).toHaveCount(0);
 
     await page.waitForLoadState("networkidle");
     expect(queried.some((t) => t.startsWith("risk_settings"))).toBe(false);
@@ -362,8 +382,8 @@ test.describe("MDRRMO settings", () => {
     await expect(header("Automation and risk rules")).toHaveAttribute("aria-expanded", "true");
     await expect.poll(() => queried.some((t) => t.startsWith("risk_settings"))).toBe(true);
 
-    await header("Users and roles").click();
-    await expect(header("Users and roles")).toHaveAttribute("aria-expanded", "true");
+    await header("Notifications for admins").click();
+    await expect(header("Notifications for admins")).toHaveAttribute("aria-expanded", "true");
     await expect(header("Automation and risk rules")).toHaveAttribute("aria-expanded", "false");
   });
 

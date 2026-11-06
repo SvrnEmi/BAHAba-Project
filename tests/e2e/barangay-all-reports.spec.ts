@@ -291,11 +291,37 @@ test.describe("all reports page", () => {
     await expect(page).toHaveURL(/source=resident&page=2/);
   });
 
-  test("the filters fit a phone", async ({ page, context }) => {
-    await page.setViewportSize({ width: 360, height: 740 });
-    await mock(context, { rows: base(), requests: [] });
+  test("photos: a public URL for report-photos, a signed URL for quick-report-photos", async ({ page, context }) => {
+    await mock(context, {
+      rows: [
+        row(1, { photo_path: "2026/a.jpg" }),
+        row(2, { kind: "quick", source: "guest", photo_path: "2026/b.jpg", photo_bucket: "quick-report-photos" }),
+        row(3, { kind: "quick", source: "guest", photo_path: "2026/gone.jpg", photo_bucket: "quick-report-photos" }),
+      ],
+      requests: [],
+    });
+    const signed: string[] = [];
+    await context.route(/\/storage\/v1\/object\/sign\//, (route) => {
+      const path = new URL(route.request().url()).pathname;
+      signed.push(path);
+      if (path.includes("gone")) return route.fulfill({ status: 400, json: { message: "Object not found" } });
+      return route.fulfill({ json: { signedURL: "/object/sign/quick-report-photos/2026/b.jpg?token=x" } });
+    });
+    await context.route(/\/storage\/v1\/object\/(public|sign)\/.*\.jpg/, (route) =>
+      route.request().method() === "GET" ? route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns='http://www.w3.org/2000/svg'/>" }) : route.fallback(),
+    );
     await open(page);
-    await expect(status(page)).toHaveText("Showing 5 of 5");
+    await expect(rowFor(page, "Place 1").locator("img")).toHaveAttribute("src", /\/object\/public\/report-photos\/2026\/a\.jpg/);
+    await expect(rowFor(page, "Place 2").locator("img")).toHaveAttribute("src", /\/object\/sign\/quick-report-photos\/2026\/b\.jpg\?token=x/);
+    await expect(rowFor(page, "Place 3").getByLabel("Photo unavailable")).toBeVisible();
+    expect(signed.some((p) => p.includes("a.jpg"))).toBe(false);
+  });
+
+  test("the filters and a long location fit a phone", async ({ page, context }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await mock(context, { rows: [row(1, { location: "GPS Location (12.4026, 121.9811) near the old municipal bridge and the public market" })], requests: [] });
+    await open(page);
+    await expect(status(page)).toHaveText("Showing 1 of 1");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });

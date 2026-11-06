@@ -430,7 +430,7 @@ export function AllReportsSection({ barangay, userId, now }: { barangay: string;
           </button>
         </div>
       ) : load.status === "loading" ? (
-        <div className="grid gap-3 xl:grid-cols-2" aria-busy="true">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2" aria-busy="true">
           {[0, 1, 2, 3].map((i) => <div key={i} className="clay h-24 animate-pulse motion-reduce:animate-none" />)}
         </div>
       ) : rows.length === 0 ? (
@@ -439,7 +439,7 @@ export function AllReportsSection({ barangay, userId, now }: { barangay: string;
         </div>
       ) : (
         <>
-          <ul className="grid gap-3 xl:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {visible.map((row) => (
               <li key={`${row.kind}-${row.id}`}>
                 <Row row={row} now={now} onOpen={() => openReport(row)} />

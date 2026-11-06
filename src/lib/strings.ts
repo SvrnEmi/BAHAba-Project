@@ -45,6 +45,12 @@ export const STRINGS = {
       impassable: "Not passable",
     } as Record<string, string>,
   },
+  barangayReports: {
+    note: "Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.",
+    community: "Community reports",
+    quick: "Quick reports",
+    pending: "Pending (waiting for MDRRMO)",
+  },
   posted: {
     title: "Posted reports",
     checking: "Checking reports...",

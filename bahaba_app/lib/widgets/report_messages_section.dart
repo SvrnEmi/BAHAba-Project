@@ -6,12 +6,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/report_messages_service.dart';
 import '../theme/app_theme.dart';
 
-/// "Messages" section on one of the resident's own reports: a collapsible
-/// thread with Barangay / MDRRMO staff. The thread loads and subscribes
+/// "Messages" section on a report: a collapsible thread between the resident
+/// and Barangay / MDRRMO staff. The thread loads and subscribes
 /// only while open; its Realtime channel is removed in dispose. Message
 /// bodies are plain [Text] (no links, no rich text).
 class ReportMessagesSection extends StatefulWidget {
   final int reportId;
+
+  /// Who is reading: the resident, or a barangay official.
+  final SenderRole viewerRole;
 
   /// The old single admin reply, shown as the first MDRRMO message.
   final String? legacyReply;
@@ -23,6 +26,7 @@ class ReportMessagesSection extends StatefulWidget {
   const ReportMessagesSection({
     super.key,
     required this.reportId,
+    this.viewerRole = SenderRole.resident,
     this.legacyReply,
     this.legacyReplyAt,
     this.service,
@@ -33,10 +37,9 @@ class ReportMessagesSection extends StatefulWidget {
 }
 
 class _ReportMessagesSectionState extends State<ReportMessagesSection> {
-  static const SenderRole _viewer = SenderRole.resident;
-
   late final ReportMessagesService _service =
       widget.service ?? ReportMessagesService();
+  SenderRole get _viewer => widget.viewerRole;
   bool _open = false;
   ReportMessage? _latest;
   DateTime? _lastSeen;

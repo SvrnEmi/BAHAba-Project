@@ -84,6 +84,32 @@ async function mock(context: BrowserContext, role: "barangay" | "resident", seed
 
 const tab = (page: import("@playwright/test").Page, name: RegExp) => page.getByRole("tab", { name });
 
+test.describe("barangay Reports page", () => {
+  test("one badge counts pending community and Quick Reports, newest first", async ({ context, page }) => {
+    await mock(context, "barangay", {
+      reports: [report(1, "pending"), report(2, "approved"), report(3, "rejected", { rejection_reason: "Not a flood" })],
+      quick: [quick(1, "pending"), quick(2, "pending", { flagged_false: true }), quick(3, "approved")],
+    });
+    await page.goto("/admin/barangay");
+    await expect(tab(page, /^Reports\s*2 pending/)).toBeVisible();
+    await expect(page.getByText("Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.")).toBeVisible();
+    await expect(page.locator("[id^=report-] .font-bold").first()).toHaveText("Purok 1");
+    await expect(page.locator("#report-1").getByText("Pending (waiting for MDRRMO)")).toBeVisible();
+    await page.locator("#report-3 button").first().click();
+    await expect(page.locator("#report-3").getByText("Not a flood")).toBeVisible();
+    await tab(page, /^Quick reports$/).click();
+    await expect(page.locator("article").first()).toContainText("Landmark 1");
+  });
+
+  test("Overview shows the barangay's numbers", async ({ context, page }) => {
+    await mock(context, "barangay", { reports: [report(1, "pending")], quick: [quick(1, "approved")] });
+    await page.goto("/admin/barangay");
+    await tab(page, /^Overview$/).click();
+    await expect(page.getByRole("heading", { name: "Overview of Tuburan" })).toBeVisible();
+    await expect(page.getByText("Waiting for MDRRMO")).toBeVisible();
+  });
+});
+
 test.describe("barangay officials cannot verify", () => {
   test("community reports have no approve or reject buttons and nothing is updated", async ({ context, page }) => {
     const db = await mock(context, "barangay", { reports: [report(1, "rejected"), report(2, "approved"), report(3, "pending")] });
@@ -97,7 +123,7 @@ test.describe("barangay officials cannot verify", () => {
   test("Quick Reports have no approve, reject, flag or block actions", async ({ context, page }) => {
     await mock(context, "barangay", { quick: [quick(1, "approved"), quick(2, "pending"), quick(4, "rejected", { flagged_false: true, flag_reason: "Prank" })] });
     await page.goto("/admin/barangay");
-    await tab(page, /Quick Reports/).first().click();
+    await tab(page, /^Quick reports$/).click();
     await expect(page.locator("#quick-report-2")).toBeVisible();
     for (const id of [1, 2, 4]) await expect(page.locator(`#quick-report-${id}`).getByRole("button")).toHaveCount(0);
     await expect(page.getByText(/Flag as false|Block device/)).toHaveCount(0);

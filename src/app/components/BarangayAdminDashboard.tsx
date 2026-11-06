@@ -22,7 +22,9 @@ import {
   type MyBarangayRow,
 } from "./barangay/BarangayStatusPanel";
 import { BarangayUpdatesBar, BarangayUpdatesColumn, FEED_LIMIT, useFeedState, type BarangayUpdate } from "./barangay/BarangayUpdatesPanel";
+import { BarangayOverview } from "./barangay/BarangayOverview";
 import {
+  BarangayReportsPage,
   CommunityReportsSection,
   QuickReportsSection,
   QUICK_REPORT_COLUMNS,
@@ -31,6 +33,7 @@ import {
   type BarangayQuickReport,
   type BarangayReport,
   type ReportFilter,
+  type ReportsView,
 } from "./barangay/BarangayReports";
 import { ALERT_COLUMNS, BarangayAlertsSection, toAlert, type BarangayAlertRow } from "./barangay/BarangayAlerts";
 
@@ -80,7 +83,9 @@ export function BarangayAdminDashboard() {
   const [reviewedAt, setReviewedAt] = useState<Record<string, number>>({});
 
   const [tab, setTab] = useState<BarangayTabId>("reports");
+  const [reportsView, setReportsView] = useState<ReportsView>("community");
   const [reportFilter, setReportFilter] = useState<ReportFilter>("all");
+  const [residents, setResidents] = useState<number | null>(null);
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [loggingOut, setLoggingOut] = useState(false);
@@ -222,6 +227,22 @@ export function BarangayAdminDashboard() {
     if (error) setAlertsError(error.message);
     else setAlerts(((data ?? []) as Record<string, unknown>[]).map(toAlert));
     setAlertsLoading(false);
+  }, [barangay]);
+
+  // Residents of my barangay, for the Overview tab.
+  useEffect(() => {
+    if (!barangay) return;
+    let cancelled = false;
+    void supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("barangay", barangay)
+      .then(({ count }) => {
+        if (!cancelled) setResidents(count ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [barangay]);
 
   // 3. Initial load + one shared realtime channel per table.
@@ -411,15 +432,17 @@ export function BarangayAdminDashboard() {
       window.setTimeout(() => el.classList.remove("update-target-flash"), 1500);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusTarget, tab, reportFilter]);
+  }, [focusTarget, tab, reportsView, reportFilter]);
 
   const openUpdate = (item: BarangayUpdate) => {
     if (item.kind === "report") {
       const report = reports.find((r) => `report-${r.id}` === item.target.elementId);
       setTab("reports");
+      setReportsView("community");
       if (report) setReportFilter(isApprovedStatus(report.status) ? "approved" : report.status === "rejected" ? "rejected" : "pending");
     } else if (item.kind === "quick") {
-      setTab("quick-reports");
+      setTab("reports");
+      setReportsView("quick");
     } else if (item.kind !== "level") {
       setTab("alerts");
     }
@@ -522,7 +545,7 @@ export function BarangayAdminDashboard() {
           <div className="clay p-5">
             <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
               {BARANGAY_TABS.map(({ id, label }) => {
-                const badge = id === "reports" ? pendingCount : id === "quick-reports" ? quickPendingCount : 0;
+                const badge = id === "reports" ? pendingCount + quickPendingCount : 0;
                 return (
                   <button key={id} type="button" role="tab" aria-selected={tab === id} className="clay-tab flex items-center gap-2" onClick={() => setTab(id)}>
                     {label}
@@ -539,32 +562,49 @@ export function BarangayAdminDashboard() {
 
             <div className="mt-5">
               {tab === "reports" ? (
-                <CommunityReportsSection
-                  barangay={barangay}
-                  userId={userId}
-                  reports={reports}
-                  loading={reportsLoading}
-                  error={reportsError}
-                  filter={reportFilter}
-                  onFilter={setReportFilter}
-                  onRetry={() => {
-                    setReportsLoading(true);
-                    void loadReports();
-                  }}
-                />
-              ) : tab === "quick-reports" ? (
-                <QuickReportsSection
-                  barangay={barangay}
-                  rows={quick}
-                  loading={quickLoading}
-                  error={quickError}
-                  onRetry={() => {
-                    setQuickLoading(true);
-                    void loadQuick();
-                  }}
+                <BarangayReportsPage
+                  view={reportsView}
+                  onView={setReportsView}
+                  community={
+                    <CommunityReportsSection
+                      barangay={barangay}
+                      userId={userId}
+                      reports={reports}
+                      loading={reportsLoading}
+                      error={reportsError}
+                      filter={reportFilter}
+                      onFilter={setReportFilter}
+                      onRetry={() => {
+                        setReportsLoading(true);
+                        void loadReports();
+                      }}
+                    />
+                  }
+                  quick={
+                    <QuickReportsSection
+                      barangay={barangay}
+                      rows={quick}
+                      loading={quickLoading}
+                      error={quickError}
+                      onRetry={() => {
+                        setQuickLoading(true);
+                        void loadQuick();
+                      }}
+                    />
+                  }
                 />
               ) : tab === "field-observations" ? (
                 <BarangayObservations barangay={barangay} now={now} />
+              ) : tab === "overview" ? (
+                <BarangayOverview
+                  barangay={barangay}
+                  residents={residents}
+                  liveAlerts={livePublished}
+                  communityReports={reports.length}
+                  quickReports={quick.length}
+                  pendingReports={pendingCount + quickPendingCount}
+                  level={row?.flood_risk ? LEVEL_LABEL[row.flood_risk] ?? row.flood_risk : "Not set"}
+                />
               ) : (
                 <BarangayAlertsSection
                   barangay={barangay}

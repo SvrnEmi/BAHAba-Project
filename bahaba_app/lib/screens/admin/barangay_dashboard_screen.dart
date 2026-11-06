@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
 
 import '../../models/alert_model.dart';
 import '../../models/community_report_model.dart';
@@ -11,17 +12,19 @@ import '../../repositories/alert_repository.dart';
 import '../../repositories/barangay_repository.dart';
 import '../../repositories/report_repository.dart';
 import '../../services/app_update_service.dart';
+import '../../services/barangay_quick_reports_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/profile_avatar_button.dart';
 import '../../widgets/flat_status_card.dart';
-import '../../widgets/report_status_badge.dart';
 import '../../widgets/risk_badge.dart';
 import '../../widgets/brand_logo.dart';
+import 'barangay_observations_tab.dart';
+import 'barangay_reports_tab.dart';
 
 /// Barangay admin dashboard, mirroring the web BarangayAdminDashboard:
-/// stats, water level controls, alert publishing, alert history
-/// and community reports.
+/// alert publishing, alert history, read-only reports, field observations
+/// and an overview with the water level controls.
 class BarangayAdminDashboardScreen extends StatefulWidget {
   const BarangayAdminDashboardScreen({super.key});
 
@@ -39,7 +42,9 @@ class _BarangayAdminDashboardScreenState
   final AlertRepository _alertRepository = AlertRepository();
   final ReportRepository _reportRepository = ReportRepository();
   late final TabController _tabController =
-      TabController(length: 4, vsync: this);
+      TabController(length: 5, vsync: this);
+  final BarangayQuickReportsService _quickService =
+      BarangayQuickReportsService();
 
   final _titleController = TextEditingController();
   final _messageController = TextEditingController();
@@ -53,7 +58,18 @@ class _BarangayAdminDashboardScreenState
   String? _loadError;
   List<Alert> _alerts = [];
   List<CommunityReport> _reports = [];
+  List<BarangayQuickReport> _quickReports = [];
+  String? _quickError;
   int _residentCount = 0;
+
+  // Tab order, in the order of the tabs in build().
+  static const int _reportsTab = 2;
+
+  // Live pending counts: community_reports on the shared channel, quick_reports
+  // on its own, because its hash columns rule out table streams.
+  StreamSubscription<List<CommunityReport>>? _reportsSub;
+  RealtimeChannel? _quickChannel;
+  Timer? _quickDebounce;
 
   // One live subscription for the screen's lifetime. Creating streams in
   // build() opened a new Supabase Realtime subscription on every rebuild.
@@ -80,6 +96,17 @@ class _BarangayAdminDashboardScreenState
         if (mounted) setState(() => _barangayError = true);
       },
     );
+    _reportsSub = _reportRepository.watchBarangay(name).listen(
+      (rows) {
+        if (mounted) setState(() => _reports = rows);
+      },
+      onError: (Object error) =>
+          debugPrint('Barangay reports stream failed: $error'),
+    );
+    _quickChannel = _quickService.subscribe(() {
+      _quickDebounce?.cancel();
+      _quickDebounce = Timer(const Duration(milliseconds: 400), _loadQuick);
+    });
     _loadData();
   }
 
@@ -87,6 +114,10 @@ class _BarangayAdminDashboardScreenState
   void dispose() {
     AppUpdateService.instance.detachHome();
     _barangaySub?.cancel();
+    _reportsSub?.cancel();
+    _quickDebounce?.cancel();
+    final channel = _quickChannel;
+    if (channel != null) unawaited(_quickService.unsubscribe(channel));
     _tabController.dispose();
     _titleController.dispose();
     _messageController.dispose();
@@ -99,7 +130,7 @@ class _BarangayAdminDashboardScreenState
     try {
       final results = await Future.wait([
         _alertRepository.fetchForBarangay(name),
-        _reportRepository.getAll(),
+        _reportRepository.fetchByBarangay(name),
         _barangayRepository.countResidents(name),
       ]);
       if (!mounted) return;
@@ -109,6 +140,7 @@ class _BarangayAdminDashboardScreenState
         _residentCount = results[2] as int;
         _loadError = null;
       });
+      await _loadQuick();
     } catch (error) {
       debugPrint('Barangay dashboard load failed: $error');
       if (mounted) {
@@ -119,6 +151,28 @@ class _BarangayAdminDashboardScreenState
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  Future<void> _loadQuick() async {
+    final name = _barangayName;
+    if (name == null || name.isEmpty) return;
+    try {
+      final rows = await _quickService.fetch(name);
+      if (!mounted) return;
+      setState(() {
+        _quickReports = rows;
+        _quickError = null;
+      });
+    } catch (error) {
+      debugPrint('Barangay Quick Reports load failed: $error');
+      if (mounted) {
+        setState(() => _quickError = 'Could not load Quick Reports.');
+      }
+    }
+  }
+
+  int get _pendingCount =>
+      _reports.where((r) => r.status == ReportStatus.pending).length +
+      _quickReports.where((r) => r.isPending).length;
 
   void _showSnack(String message) {
     if (!mounted) return;
@@ -253,11 +307,26 @@ class _BarangayAdminDashboardScreenState
                 tabAlignment: TabAlignment.start,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 indicatorPadding: const EdgeInsets.symmetric(vertical: 6),
-                tabs: const [
-                  Tab(text: 'Overview'),
-                  Tab(text: 'Create Alert'),
-                  Tab(text: 'My Alerts'),
-                  Tab(text: 'Community Reports'),
+                tabs: [
+                  const Tab(text: 'Create Alert'),
+                  const Tab(text: 'My Alerts'),
+                  Tab(
+                    child: Semantics(
+                      label: _pendingCount == 0
+                          ? 'Reports'
+                          : 'Reports, $_pendingCount pending',
+                      excludeSemantics: true,
+                      child: Badge(
+                        isLabelVisible: _pendingCount > 0,
+                        label: Text('$_pendingCount'),
+                        backgroundColor: AppColors.riskHigh,
+                        offset: const Offset(14, -6),
+                        child: const Text('Reports'),
+                      ),
+                    ),
+                  ),
+                  const Tab(text: 'Field Observations'),
+                  const Tab(text: 'Overview'),
                 ],
               )
             : null,
@@ -267,10 +336,17 @@ class _BarangayAdminDashboardScreenState
             ? TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildOverview(),
                   _buildCreateAlert(),
                   _buildMyAlerts(),
-                  _buildReports(),
+                  BarangayReportsTab(
+                    reports: _reports,
+                    quickReports: _quickReports,
+                    loading: _loading,
+                    quickError: _quickError,
+                    onRefresh: _loadData,
+                  ),
+                  BarangayObservationsTab(barangay: name),
+                  _buildOverview(),
                 ],
               )
             : const Padding(
@@ -433,7 +509,7 @@ class _BarangayAdminDashboardScreenState
           subtitle:
               'From ${report.userName} | ${_formatTime(report.timestamp)}',
           action: TextButton(
-            onPressed: () => _tabController.animateTo(3),
+            onPressed: () => _tabController.animateTo(_reportsTab),
             child: const Text('View'),
           ),
         ),
@@ -572,41 +648,6 @@ class _BarangayAdminDashboardScreenState
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _AlertCard(alert: alert),
-              ),
-        ],
-      ),
-    );
-  }
-
-  // ---------- Community Reports ----------
-
-  Widget _buildReports() {
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('Community Reports - $_barangayName', style: _sectionTitle),
-          const SizedBox(height: 12),
-          const _NoteBanner(
-            color: AppColors.warning,
-            text:
-                'Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.',
-          ),
-          const SizedBox(height: 12),
-          if (_loading)
-            _loadingIndicator()
-          else if (_reports.isEmpty)
-            const _EmptyState(
-              icon: Icons.place_outlined,
-              message: 'No community reports yet.',
-            )
-          else
-            for (final report in _reports)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _ReportCard(report: report),
               ),
         ],
       ),
@@ -903,129 +944,6 @@ class _AlertCard extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _ReportCard extends StatelessWidget {
-  final CommunityReport report;
-
-  const _ReportCard({required this.report});
-
-  @override
-  Widget build(BuildContext context) {
-    final initial =
-        report.userName.isNotEmpty ? report.userName[0].toUpperCase() : '?';
-    final gps = report.lat != null && report.lng != null
-        ? '${report.lat!.toStringAsFixed(6)}, ${report.lng!.toStringAsFixed(6)}'
-        : 'Not provided';
-
-    return FlatPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                backgroundColor: AppColors.mint,
-                foregroundColor: AppColors.ink,
-                child: Text(initial),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(report.userName,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Text(
-                      report.location,
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                    Text(
-                      'GPS: $gps',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ReportStatusBadge(status: report.status.value),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _ReportPhoto(path: report.photoPath),
-          const SizedBox(height: 12),
-          Text(report.description),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.water_drop,
-                  size: 16, color: AppColors.secondary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Water Level: ${report.waterLevel.label}',
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.schedule,
-                  size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 6),
-              Text(
-                _formatTime(report.timestamp),
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReportPhoto extends StatelessWidget {
-  final String? path;
-
-  const _ReportPhoto({required this.path});
-
-  Widget _placeholder(String text) => Container(
-        height: 64,
-        width: double.infinity,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child:
-            Text(text, style: const TextStyle(color: AppColors.textSecondary)),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final url = path;
-    if (url == null || url.isEmpty) return _placeholder('No photo attached');
-    if (!url.startsWith('http')) return _placeholder('Photo not available');
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: Image.network(
-        url,
-        height: 140,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _placeholder('Photo not available'),
       ),
     );
   }

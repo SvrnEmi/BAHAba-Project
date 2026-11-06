@@ -37,6 +37,11 @@ class ReportRepository {
   /// device are reflected immediately without a manual refresh.
   Stream<List<CommunityReport>> watchAll() => _watchWhere((_) => true);
 
+  /// Live stream of one barangay's reports, every status. Any signed-in user
+  /// can read all of community_reports, so the filter must be applied here.
+  Stream<List<CommunityReport>> watchBarangay(String barangay) =>
+      _watchWhere((row) => row['barangay'] == barangay);
+
   /// Live stream of approved reports only. Use this for the public
   /// community feed so pending/rejected reports are never shown.
   Stream<List<CommunityReport>> watchApproved() =>
@@ -71,6 +76,17 @@ class ReportRepository {
         .select(columns)
         .inFilter('user_name', userNames)
         .order('timestamp', ascending: false);
+    return rows.map<CommunityReport>(_fromRow).toList();
+  }
+
+  /// One barangay's reports, every status, newest first.
+  Future<List<CommunityReport>> fetchByBarangay(String barangay) async {
+    final rows = await _client
+        .from('community_reports')
+        .select(columns)
+        .eq('barangay', barangay)
+        .order('timestamp', ascending: false)
+        .limit(200);
     return rows.map<CommunityReport>(_fromRow).toList();
   }
 

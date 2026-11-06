@@ -8,6 +8,8 @@ import { displayReporterName, waterLevelLabel } from "../../../lib/reports";
 import { formatManilaDateTime } from "../../../lib/barangayAdmin";
 import { DisclosureCard } from "../alerts/AlertDisclosure";
 import { queryReports, type ReportSort } from "../../../lib/reportQuery";
+import { reportPhotoUrl } from "../../../lib/postedReports";
+import { STRINGS } from "../../../lib/strings";
 import { ReportQueryBar } from "../ReportQueryBar";
 
 /*
@@ -69,12 +71,6 @@ const FILTERS: Array<{ id: ReportFilter; label: string }> = [
 const matches = (r: { status: string | null }, f: ReportFilter) =>
   f === "all" ? true : f === "approved" ? isApprovedStatus(r.status) : f === "rejected" ? r.status === "rejected" : !isApprovedStatus(r.status) && r.status !== "rejected";
 
-/** Pending first, then approved, then rejected; order within a status is kept. */
-const pendingFirst = <T extends { status: string | null }>(rows: T[]): T[] => {
-  const rank = (status: string | null) => (isApprovedStatus(status) ? 1 : status === "rejected" ? 2 : 0);
-  return [...rows].sort((a, b) => rank(a.status) - rank(b.status));
-};
-
 function ErrorBox({ text }: { text: string }) {
   return (
     <p role="alert" className="bg-white px-3 py-2 text-sm" style={{ borderLeft: "4px solid var(--risk-high)", color: "var(--text-primary)" }}>
@@ -86,7 +82,42 @@ function ErrorBox({ text }: { text: string }) {
 function StatusBadge({ status }: { status: string | null }) {
   if (isApprovedStatus(status)) return <span className="risk-badge risk-badge-low is-compact"><CheckCircle size={12} aria-hidden="true" /> Approved</span>;
   if (status === "rejected") return <span className="risk-badge risk-badge-high is-compact"><XCircle size={12} aria-hidden="true" /> Rejected</span>;
-  return <span className="risk-badge risk-badge-medium is-compact"><Clock size={12} aria-hidden="true" /> Pending</span>;
+  return <span className="risk-badge risk-badge-medium is-compact"><Clock size={12} aria-hidden="true" /> {STRINGS.barangayReports.pending}</span>;
+}
+
+export type ReportsView = "community" | "quick";
+
+/** The barangay Reports item: read-only, with one tab per kind of report. */
+export function BarangayReportsPage({
+  view,
+  onView,
+  community,
+  quick,
+}: {
+  view: ReportsView;
+  onView: (view: ReportsView) => void;
+  community: ReactNode;
+  quick: ReactNode;
+}) {
+  const views: Array<{ id: ReportsView; label: string }> = [
+    { id: "community", label: STRINGS.barangayReports.community },
+    { id: "quick", label: STRINGS.barangayReports.quick },
+  ];
+  return (
+    <div className="space-y-4">
+      <p className="bg-white px-3 py-2 text-sm" style={{ borderLeft: "4px solid var(--primary-shade)", color: "var(--text-primary)" }}>
+        {STRINGS.barangayReports.note}
+      </p>
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Report type">
+        {views.map((v) => (
+          <button key={v.id} type="button" role="tab" aria-selected={view === v.id} className="clay-tab" onClick={() => onView(v.id)}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+      {view === "community" ? community : quick}
+    </div>
+  );
 }
 
 export function CommunityReportsSection({
@@ -112,8 +143,7 @@ export function CommunityReportsSection({
   const [sort, setSort] = useState<ReportSort>("newest");
   const { latest, update: updateLatest } = useLatestMessages(reports.filter((r) => r.barangay === barangay).map((r) => r.id));
   const inFilter = reports.filter((r) => matches(r, filter));
-  const queried = queryReports(inFilter, query, sort, (id) => latest[id]?.created_at);
-  const visible = filter === "all" ? pendingFirst(queried) : queried;
+  const visible = queryReports(inFilter, query, sort, (id) => latest[id]?.created_at);
   const newIds = new Set(
     reports.filter((r) => hasNewMessage(latest[r.id], "barangay", userId ? getThreadLastSeen(userId, r.id) : 0)).map((r) => r.id),
   );
@@ -210,7 +240,7 @@ function ReportCard({ report, hasNew, children }: { report: BarangayReport; hasN
         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>By {displayReporterName(report.user_name)}</p>
         {report.description && <p className="whitespace-pre-wrap break-words text-sm font-normal">{report.description}</p>}
         <div className="flex flex-wrap items-end gap-3">
-          {report.photo_path && <ReportThumb src={report.photo_path} />}
+          {report.photo_path && <ReportThumb src={reportPhotoUrl(report.photo_path)} />}
           {hasCoords && (
             <a
               href={`https://www.google.com/maps?q=${report.lat},${report.lng}`}
@@ -263,7 +293,7 @@ export function QuickReportsSection({
   onRetry: () => void;
 }) {
   const [filter, setFilter] = useState<ReportFilter>("all");
-  const visible = pendingFirst(rows.filter((r) => matches(r, filter)));
+  const visible = rows.filter((r) => matches(r, filter));
 
   return (
     <div className="space-y-4">
@@ -356,6 +386,7 @@ function QuickReportCard({ row }: { row: BarangayQuickReport }) {
       {flagged && row.flag_reason?.trim() && (
         <p className="text-sm"><span className="font-semibold">MDRRMO note:</span> {row.flag_reason}</p>
       )}
+      {row.reviewed_at && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Reviewed by the MDRRMO {formatManilaDateTime(row.reviewed_at)}</p>}
     </article>
   );
 }

@@ -26,14 +26,12 @@ export const MDRRMO_OTHER_TABS: ReadonlyArray<{ id: MdrrmoTabId; label: string; 
   { id: "field-observations", label: "Field Observations", icon: Eye },
 ];
 
-type SharedTabId = Extract<AdminTabId, "alerts" | "reports" | "quick-reports">;
-export type BarangayTabId = SharedTabId | "field-observations";
+export type BarangayTabId = "alerts" | "reports" | "field-observations" | "overview";
 
-const isSharedTab = (tab: (typeof ADMIN_TABS)[number]): tab is (typeof ADMIN_TABS)[number] & { id: SharedTabId } =>
-  tab.id === "alerts" || tab.id === "reports" || tab.id === "quick-reports";
-
-/** The shared tabs in the same order, then the barangay-only pages. */
+/** The barangay menu. Reports is read-only: the MDRRMO is the only verifier. */
 export const BARANGAY_TABS: ReadonlyArray<{ id: BarangayTabId; label: string }> = [
-  ...ADMIN_TABS.filter(isSharedTab),
+  { id: "alerts", label: "Create Alert" },
+  { id: "reports", label: "Reports" },
   { id: "field-observations", label: "Field Observations" },
+  { id: "overview", label: "Overview" },
 ];

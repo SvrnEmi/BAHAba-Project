@@ -70,6 +70,13 @@ class AppStrings {
     return '${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'} ago';
   }
 
+  // Barangay Reports
+  static const barangayReportsNote =
+      'Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.';
+  static const barangayCommunityReports = 'Community reports';
+  static const barangayQuickReports = 'Quick reports';
+  static const barangayPending = 'Pending (waiting for MDRRMO)';
+
   // Posted reports
   static const postedTitle = 'Posted reports';
   static const postedDetailTitle = 'Flood report';

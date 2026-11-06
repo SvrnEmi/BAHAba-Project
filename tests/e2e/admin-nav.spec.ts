@@ -90,7 +90,7 @@ test("every MDRRMO tab still opens its page", async ({ browser }) => {
   await context.close();
 });
 
-test("barangay tabs keep the same order and labels; Quick Reports is its own tab", async ({ browser }) => {
+test("barangay menu is Create Alert, Reports, Field Observations, Overview; Reports has two tabs", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   const email = await mock(context, "barangay");
   const page = await context.newPage();
@@ -98,8 +98,8 @@ test("barangay tabs keep the same order and labels; Quick Reports is its own tab
 
   const tablist = page.getByRole("tablist", { name: "Dashboard sections" });
   const labels = (await tablist.getByRole("tab").allInnerTexts()).map((t) => t.replace(/\s*\(.*\)\s*$/, "").trim());
-  expect(labels).toEqual(["Create Alert", "Verify Reports", "Quick Reports", "Field Observations"]);
-  await expect(page.getByRole("tablist", { name: "Report type" })).toHaveCount(0);
+  expect(labels).toEqual(["Create Alert", "Reports", "Field Observations", "Overview"]);
+  await expect(page.getByRole("tablist", { name: "Report type" }).getByRole("tab")).toHaveText(["Community reports", "Quick reports"]);
 
   await tablist.getByRole("tab", { name: /Create Alert/ }).click();
   await expect(page.getByRole("heading", { name: "Create Alert", exact: true })).toBeVisible();

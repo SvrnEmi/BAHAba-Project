@@ -13,18 +13,21 @@ import '../../repositories/barangay_repository.dart';
 import '../../repositories/report_repository.dart';
 import '../../services/app_update_service.dart';
 import '../../services/barangay_quick_reports_service.dart';
+import '../../services/field_observations_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/profile_avatar_button.dart';
 import '../../widgets/flat_status_card.dart';
 import '../../widgets/risk_badge.dart';
 import '../../widgets/brand_logo.dart';
+import '../profile_screen.dart';
+import 'barangay_home_tab.dart';
 import 'barangay_observations_tab.dart';
 import 'barangay_reports_tab.dart';
 
 /// Barangay admin dashboard, mirroring the web BarangayAdminDashboard:
-/// alert publishing, alert history, read-only reports, field observations
-/// and an overview with the water level controls.
+/// shortcut tiles, alert publishing, alert history, read-only reports, field
+/// observations and an overview with the water level controls.
 class BarangayAdminDashboardScreen extends StatefulWidget {
   const BarangayAdminDashboardScreen({super.key});
 
@@ -37,12 +40,12 @@ final _sectionTitle = AppText.heading(size: 18);
 
 class _BarangayAdminDashboardScreenState
     extends State<BarangayAdminDashboardScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final BarangayRepository _barangayRepository = BarangayRepository();
   final AlertRepository _alertRepository = AlertRepository();
   final ReportRepository _reportRepository = ReportRepository();
   late final TabController _tabController =
-      TabController(length: 5, vsync: this);
+      TabController(length: 6, vsync: this);
   final BarangayQuickReportsService _quickService =
       BarangayQuickReportsService();
 
@@ -63,7 +66,27 @@ class _BarangayAdminDashboardScreenState
   int _residentCount = 0;
 
   // Tab order, in the order of the tabs in build().
-  static const int _reportsTab = 2;
+  static const int _createTab = 1;
+  static const int _myAlertsTab = 2;
+  static const int _reportsTab = 3;
+  static const int _observationsTab = 4;
+  static const int _overviewTab = 5;
+
+  // Numbers only the Home tiles need. Null until the first read.
+  List<Alert>? _activeAlerts;
+  bool _activeFailed = false;
+  bool _observationLoaded = false;
+  bool _observationFailed = false;
+  DateTime? _latestObservation;
+  bool _reportsFailed = false;
+  DateTime _now = DateTime.now();
+  Timer? _clock;
+
+  // Live tiles: alerts on the shared channel, observations on their own.
+  StreamSubscription<List<Alert>>? _alertsSub;
+  Timer? _alertsDebounce;
+  RealtimeChannel? _observationChannel;
+  Timer? _observationDebounce;
 
   // Live pending counts: community_reports on the shared channel, quick_reports
   // on its own, because its hash columns rule out table streams.
@@ -76,6 +99,7 @@ class _BarangayAdminDashboardScreenState
   StreamSubscription<Map<String, dynamic>?>? _barangaySub;
   Map<String, dynamic>? _barangayRow;
   bool _barangayError = false;
+  bool _barangayLoaded = false;
 
   @override
   void initState() {
@@ -87,9 +111,19 @@ class _BarangayAdminDashboardScreenState
       _loading = false;
       return;
     }
+    WidgetsBinding.instance.addObserver(this);
+    // "20 min ago", end times and "today" move with the clock.
+    _clock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
     _barangaySub = _barangayRepository.watchBarangay(name).listen(
       (row) {
-        if (mounted) setState(() => _barangayRow = row);
+        if (mounted) {
+          setState(() {
+            _barangayRow = row;
+            _barangayLoaded = true;
+          });
+        }
       },
       onError: (Object error) {
         debugPrint('Barangay status stream failed: $error');
@@ -98,26 +132,118 @@ class _BarangayAdminDashboardScreenState
     );
     _reportsSub = _reportRepository.watchBarangay(name).listen(
       (rows) {
-        if (mounted) setState(() => _reports = rows);
+        if (mounted) {
+          setState(() {
+            _reports = rows;
+            _reportsFailed = false;
+          });
+        }
       },
-      onError: (Object error) =>
-          debugPrint('Barangay reports stream failed: $error'),
+      onError: (Object error) {
+        debugPrint('Barangay reports stream failed: $error');
+        if (mounted) setState(() => _reportsFailed = true);
+      },
     );
     _quickChannel = _quickService.subscribe(() {
       _quickDebounce?.cancel();
       _quickDebounce = Timer(const Duration(milliseconds: 400), _loadQuick);
     });
-    _loadData();
+    // What is active depends on other rows, so a change re-reads the view.
+    _alertsSub = _alertRepository.watchAll().listen(
+      (_) {
+        _alertsDebounce?.cancel();
+        _alertsDebounce = Timer(const Duration(milliseconds: 400), () {
+          _loadAlerts();
+          _loadActiveAlerts();
+        });
+      },
+      onError: (Object error) => debugPrint('Alerts channel: $error'),
+    );
+    _observationChannel = FieldObservationsService.subscribe(() {
+      _observationDebounce?.cancel();
+      _observationDebounce =
+          Timer(const Duration(milliseconds: 400), _loadLatestObservation);
+    });
+    _refreshAll();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    setState(() => _now = DateTime.now());
+    _refreshAll();
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _loadData(),
+      _loadActiveAlerts(),
+      _loadLatestObservation(),
+    ]);
+  }
+
+  Future<void> _loadAlerts() async {
+    final name = _barangayName;
+    if (name == null || name.isEmpty) return;
+    try {
+      final rows = await _alertRepository.fetchForBarangay(name);
+      if (mounted) setState(() => _alerts = rows);
+    } catch (error) {
+      debugPrint('Barangay alerts load failed: $error');
+    }
+  }
+
+  Future<void> _loadActiveAlerts() async {
+    final name = _barangayName;
+    if (name == null || name.isEmpty) return;
+    try {
+      final rows =
+          await _alertRepository.fetchResidentAlerts(name, limit: 200);
+      if (!mounted) return;
+      setState(() {
+        _activeAlerts = rows;
+        _activeFailed = false;
+      });
+    } catch (error) {
+      debugPrint('Active alerts load failed: $error');
+      if (mounted) setState(() => _activeFailed = true);
+    }
+  }
+
+  Future<void> _loadLatestObservation() async {
+    final name = _barangayName;
+    if (name == null || name.isEmpty) return;
+    try {
+      final latest = await FieldObservationsService.latestAt(name);
+      if (!mounted) return;
+      setState(() {
+        _latestObservation = latest;
+        _observationLoaded = true;
+        _observationFailed = false;
+      });
+    } catch (error) {
+      debugPrint('Latest observation load failed: $error');
+      if (mounted) setState(() => _observationFailed = true);
+    }
   }
 
   @override
   void dispose() {
     AppUpdateService.instance.detachHome();
+    WidgetsBinding.instance.removeObserver(this);
+    _clock?.cancel();
     _barangaySub?.cancel();
     _reportsSub?.cancel();
+    _alertsSub?.cancel();
     _quickDebounce?.cancel();
+    _alertsDebounce?.cancel();
+    _observationDebounce?.cancel();
     final channel = _quickChannel;
     if (channel != null) unawaited(_quickService.unsubscribe(channel));
+    final observations = _observationChannel;
+    if (observations != null) {
+      unawaited(FieldObservationsService.unsubscribe(observations));
+    }
     _tabController.dispose();
     _titleController.dispose();
     _messageController.dispose();
@@ -168,6 +294,69 @@ class _BarangayAdminDashboardScreenState
         setState(() => _quickError = 'Could not load Quick Reports.');
       }
     }
+  }
+
+  void _openTile(BarangayTile tile) {
+    switch (tile) {
+      case BarangayTile.createAlert:
+        _tabController.animateTo(_createTab);
+      case BarangayTile.reports:
+        _tabController.animateTo(_reportsTab);
+      case BarangayTile.fieldObservations:
+        _tabController.animateTo(_observationsTab);
+      case BarangayTile.myAlerts:
+        _tabController.animateTo(_myAlertsTab);
+      case BarangayTile.overview:
+        _tabController.animateTo(_overviewTab);
+      case BarangayTile.settings:
+        // The app has no Settings page: account and notifications are here.
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        );
+    }
+  }
+
+  Widget _buildHome(String name) {
+    final active = _activeAlerts;
+    final risk = _barangayRow?['flood_risk'] as String?;
+    final dataFailed = _loadError != null;
+    return BarangayHomeTab(
+      barangay: name,
+      now: _now,
+      activeAlerts: _activeFailed
+          ? const TileValue.failed()
+          : active == null
+              ? const TileValue.loading()
+              : TileValue(countActiveAlerts(active, _now.toUtc())),
+      pendingReports: dataFailed || _reportsFailed
+          ? const TileValue.failed()
+          : _loading
+              ? const TileValue.loading()
+              : TileValue(_reports
+                  .where((r) => r.status == ReportStatus.pending)
+                  .length),
+      latestObservation: _observationFailed
+          ? const TileValue.failed()
+          : !_observationLoaded
+              ? const TileValue.loading()
+              : _latestObservation == null
+                  ? const TileValue.none()
+                  : TileValue(_latestObservation!),
+      publishedToday: dataFailed
+          ? const TileValue.failed()
+          : _loading
+              ? const TileValue.loading()
+              : TileValue(countPublishedToday(_alerts, name, _now)),
+      risk: _barangayError
+          ? const TileValue.failed()
+          : !_barangayLoaded
+              ? const TileValue.loading()
+              : const TileValue.none(),
+      riskLabel: _riskLabel(risk),
+      riskColor: _riskColor(risk),
+      onOpen: _openTile,
+      onRefresh: _refreshAll,
+    );
   }
 
   int get _pendingCount =>
@@ -308,6 +497,7 @@ class _BarangayAdminDashboardScreenState
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 indicatorPadding: const EdgeInsets.symmetric(vertical: 6),
                 tabs: [
+                  const Tab(text: 'Home'),
                   const Tab(text: 'Create Alert'),
                   const Tab(text: 'My Alerts'),
                   Tab(
@@ -336,6 +526,7 @@ class _BarangayAdminDashboardScreenState
             ? TabBarView(
                 controller: _tabController,
                 children: [
+                  _buildHome(name),
                   _buildCreateAlert(),
                   _buildMyAlerts(),
                   BarangayReportsTab(

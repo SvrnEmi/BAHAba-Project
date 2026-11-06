@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// What barangay officials report from the ground (public.field_observations).
@@ -86,6 +87,40 @@ class FieldObservationsService {
         .order('observed_at', ascending: false)
         .limit(200);
     return rows.map(FieldObservation.fromRow).toList();
+  }
+
+  /// When the barangay's newest reading was made, or null if it has none.
+  static Future<DateTime?> latestAt(String barangay) async {
+    final rows = await _client
+        .from('field_observations')
+        .select('observed_at')
+        .eq('barangay', barangay)
+        .order('observed_at', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return DateTime.parse(rows.first['observed_at'] as String).toLocal();
+  }
+
+  /// Calls [onChange] on any change. Only a signal, so the whole table is not
+  /// pulled in. Remove the returned channel with [unsubscribe].
+  static RealtimeChannel subscribe(void Function() onChange) {
+    return _client
+        .channel('field-observations-${DateTime.now().microsecondsSinceEpoch}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'field_observations',
+          callback: (_) => onChange(),
+        )
+        .subscribe();
+  }
+
+  static Future<void> unsubscribe(RealtimeChannel channel) async {
+    try {
+      await _client.removeChannel(channel);
+    } catch (error) {
+      debugPrint('Field observations: removeChannel failed: $error');
+    }
   }
 
   static Future<void> create({

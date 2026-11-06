@@ -23,6 +23,8 @@ import {
 } from "./barangay/BarangayStatusPanel";
 import { BarangayUpdatesBar, BarangayUpdatesColumn, FEED_LIMIT, useFeedState, type BarangayUpdate } from "./barangay/BarangayUpdatesPanel";
 import { BarangayOverview } from "./barangay/BarangayOverview";
+import { BarangayHomeTiles, type TileTarget } from "./barangay/BarangayHomeTiles";
+import { countPublishedToday, useRefreshOnFocus } from "../../lib/barangayTiles";
 import {
   BarangayReportsPage,
   CommunityReportsSection,
@@ -41,13 +43,17 @@ import { ALERT_COLUMNS, BarangayAlertsSection, toAlert, type BarangayAlertRow } 
  * Barangay admin dashboard. Everything is scoped to the signed-in admin's own
  * barangay (profiles.barangay). One shared realtime channel per table
  * (barangays, community_reports, alerts, quick_reports) feeds the status
- * panel, the lists and the Recent updates column; no polling.
+ * panel, the lists and the Recent updates column; no polling. Everything is
+ * read again when the tab regains focus, in case a change was missed.
  */
 
 type Profile = { name: string | null; barangay: string | null };
 type LevelEvent = { key: string; time: number; level: string; source: string };
 
 const LEVEL_LABEL: Record<string, string> = { low: "Low risk", medium: "Medium risk", high: "High risk" };
+
+/** The card holding the tabs: where a tile scrolls to. */
+const SECTIONS_ID = "barangay-sections";
 
 function levelEventFrom(row: MyBarangayRow, time: number): LevelEvent | null {
   if (!time || !row.flood_risk) return null;
@@ -312,6 +318,13 @@ export function BarangayAdminDashboard() {
     };
   }, [barangay, loadStatus, loadReports, loadQuick, loadAlerts]);
 
+  useRefreshOnFocus(() => {
+    void loadStatus();
+    void loadReports();
+    void loadQuick();
+    void loadAlerts();
+  });
+
   // My barangay row only: UPDATEs on a channel filtered to its id (other
   // barangays' updates never reach this dashboard).
   const myBarangayId = row?.id ?? null;
@@ -425,7 +438,8 @@ export function BarangayAdminDashboard() {
       setFocusTarget(null);
       if (!el) return;
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: el.id === "barangay-status" ? "start" : "center" });
+      el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: el.id === "barangay-status" || el.id === SECTIONS_ID ? "start" : "center" });
+      if (el.id === SECTIONS_ID) el.focus({ preventScroll: true });
       el.classList.remove("update-target-flash");
       void el.offsetWidth; // restart the flash if the same item is opened twice
       el.classList.add("update-target-flash");
@@ -447,6 +461,22 @@ export function BarangayAdminDashboard() {
       setTab("alerts");
     }
     setFocusTarget(item.target.elementId);
+  };
+
+  const pendingCount = reports.filter((r) => !isApprovedStatus(r.status) && r.status !== "rejected").length;
+
+  const openTile = (target: TileTarget) => {
+    if (target === "settings") {
+      navigate("/admin/barangay/settings");
+      return;
+    }
+    if (target === "reports") {
+      // The tile counts pending community reports, so open on them.
+      setReportsView("community");
+      setReportFilter(pendingCount ? "pending" : "all");
+    }
+    setTab(target === "my-alerts" ? "alerts" : target);
+    setFocusTarget(target === "my-alerts" ? "my-published-title" : SECTIONS_ID);
   };
 
   const logout = async () => {
@@ -510,7 +540,6 @@ export function BarangayAdminDashboard() {
     );
   }
 
-  const pendingCount = reports.filter((r) => !isApprovedStatus(r.status) && r.status !== "rejected").length;
   const quickPendingCount = quick.filter((q) => q.status === "pending" && !q.flagged_false).length;
   const livePublished = published.filter((a) => a.status === "approved").length;
 
@@ -527,6 +556,15 @@ export function BarangayAdminDashboard() {
 
       <div className="mx-auto max-w-7xl px-6 py-6 lg:grid lg:max-w-[1660px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">
         <div className="min-w-0 space-y-6">
+          <BarangayHomeTiles
+            barangay={barangay}
+            now={now}
+            pendingReports={reportsLoading ? undefined : reportsError ? null : pendingCount}
+            publishedToday={alertsLoading ? undefined : alertsError ? null : countPublishedToday(published, now)}
+            risk={statusLoading ? undefined : statusError ? null : row?.flood_risk ?? ""}
+            onOpen={openTile}
+          />
+
           <BarangayStatusPanel
             barangayName={barangay}
             row={row}
@@ -542,7 +580,7 @@ export function BarangayAdminDashboard() {
             onChanged={loadStatus}
           />
 
-          <div className="clay p-5">
+          <div id={SECTIONS_ID} tabIndex={-1} className="clay p-5 outline-none" style={{ scrollMarginTop: headerHeight + 16 }}>
             <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
               {BARANGAY_TABS.map(({ id, label }) => {
                 const badge = id === "reports" ? pendingCount + quickPendingCount : 0;

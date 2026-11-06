@@ -94,6 +94,9 @@ class _BarangayAdminDashboardScreenState
   RealtimeChannel? _quickChannel;
   Timer? _quickDebounce;
 
+  // Tells the All reports list that a report of this barangay changed.
+  final _reportChanges = ValueNotifier<int>(0);
+
   // One live subscription for the screen's lifetime. Creating streams in
   // build() opened a new Supabase Realtime subscription on every rebuild.
   StreamSubscription<Map<String, dynamic>?>? _barangaySub;
@@ -137,6 +140,7 @@ class _BarangayAdminDashboardScreenState
             _reports = rows;
             _reportsFailed = false;
           });
+          _reportChanges.value++;
         }
       },
       onError: (Object error) {
@@ -146,7 +150,10 @@ class _BarangayAdminDashboardScreenState
     );
     _quickChannel = _quickService.subscribe(() {
       _quickDebounce?.cancel();
-      _quickDebounce = Timer(const Duration(milliseconds: 400), _loadQuick);
+      _quickDebounce = Timer(const Duration(milliseconds: 400), () {
+        _loadQuick();
+        _reportChanges.value++;
+      });
     });
     // What is active depends on other rows, so a change re-reads the view.
     _alertsSub = _alertRepository.watchAll().listen(
@@ -172,6 +179,7 @@ class _BarangayAdminDashboardScreenState
     if (state != AppLifecycleState.resumed) return;
     setState(() => _now = DateTime.now());
     _refreshAll();
+    _reportChanges.value++;
   }
 
   Future<void> _refreshAll() async {
@@ -245,6 +253,7 @@ class _BarangayAdminDashboardScreenState
       unawaited(FieldObservationsService.unsubscribe(observations));
     }
     _tabController.dispose();
+    _reportChanges.dispose();
     _titleController.dispose();
     _messageController.dispose();
     super.dispose();
@@ -530,6 +539,8 @@ class _BarangayAdminDashboardScreenState
                   _buildCreateAlert(),
                   _buildMyAlerts(),
                   BarangayReportsTab(
+                    barangay: name,
+                    changes: _reportChanges,
                     reports: _reports,
                     quickReports: _quickReports,
                     loading: _loading,

@@ -47,6 +47,7 @@ export const STRINGS = {
   },
   barangayReports: {
     note: "Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.",
+    all: "All reports",
     community: "Community reports",
     quick: "Quick reports",
     pending: "Pending (waiting for MDRRMO)",

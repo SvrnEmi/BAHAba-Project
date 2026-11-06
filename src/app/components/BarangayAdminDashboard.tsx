@@ -23,6 +23,7 @@ import {
 } from "./barangay/BarangayStatusPanel";
 import { BarangayUpdatesBar, BarangayUpdatesColumn, FEED_LIMIT, useFeedState, type BarangayUpdate } from "./barangay/BarangayUpdatesPanel";
 import { BarangayOverview } from "./barangay/BarangayOverview";
+import { AllReportsSection } from "./barangay/AllReports";
 import { BarangayHomeTiles, type TileTarget } from "./barangay/BarangayHomeTiles";
 import { countPublishedToday, useRefreshOnFocus } from "../../lib/barangayTiles";
 import {
@@ -89,7 +90,7 @@ export function BarangayAdminDashboard() {
   const [reviewedAt, setReviewedAt] = useState<Record<string, number>>({});
 
   const [tab, setTab] = useState<BarangayTabId>("reports");
-  const [reportsView, setReportsView] = useState<ReportsView>("community");
+  const [reportsView, setReportsView] = useState<ReportsView>("all");
   const [reportFilter, setReportFilter] = useState<ReportFilter>("all");
   const [residents, setResidents] = useState<number | null>(null);
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
@@ -603,6 +604,7 @@ export function BarangayAdminDashboard() {
                 <BarangayReportsPage
                   view={reportsView}
                   onView={setReportsView}
+                  all={<AllReportsSection barangay={barangay} userId={userId} now={now} />}
                   community={
                     <CommunityReportsSection
                       barangay={barangay}

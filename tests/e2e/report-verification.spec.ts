@@ -123,6 +123,7 @@ test.describe("barangay Reports page", () => {
       quick: [quick(1, "pending"), quick(2, "pending", { flagged_false: true }), quick(3, "approved")],
     });
     await page.goto("/admin/barangay");
+    await tab(page, /^Community reports$/).click();
     await expect(tab(page, /^Reports\s*2 pending/)).toBeVisible();
     await expect(page.getByText("Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.")).toBeVisible();
     await expect(page.locator("[id^=report-] .font-bold").first()).toHaveText("Purok 1");
@@ -146,6 +147,7 @@ test.describe("barangay officials cannot verify", () => {
   test("community reports have no approve or reject buttons and nothing is updated", async ({ context, page }) => {
     const db = await mock(context, "barangay", { reports: [report(1, "rejected"), report(2, "approved"), report(3, "pending")] });
     await page.goto("/admin/barangay");
+    await tab(page, /^Community reports$/).click();
     await page.locator("#report-3 button").first().click();
     await expect(page.locator("#report-3").getByText("By Ana Reyes")).toBeVisible();
     await expect(page.getByRole("button", { name: /^(Approve|Reject)$/ })).toHaveCount(0);
@@ -171,6 +173,7 @@ test.describe("advisories for staff", () => {
   test("a barangay official posts one, sending only report_id and body, and deletes only their own", async ({ context, page }) => {
     const db = await mock(context, "barangay", { reports: [report(1, "pending")], advisories: [advisory(5, 1)] });
     await page.goto("/admin/barangay");
+    await tab(page, /^Community reports$/).click();
     const card = await open(page, 1);
     await expect(card.getByText("private, between you and the reporter, in the message thread.")).toBeVisible();
     await expect(card.getByText("public, shown on the posted report to residents once the report is verified.")).toBeVisible();
@@ -200,6 +203,7 @@ test.describe("advisories for staff", () => {
   test("the private message thread still works for officials", async ({ context, page }) => {
     const db = await mock(context, "barangay", { reports: [report(1, "pending")] });
     await page.goto("/admin/barangay");
+    await tab(page, /^Community reports$/).click();
     const card = await open(page, 1);
     await card.getByRole("button", { name: /^Messages/ }).click();
     await card.getByPlaceholder("Write a message").fill("Is the road passable?");

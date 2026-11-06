@@ -12,10 +12,15 @@ import '../../widgets/report_advisories_section.dart';
 import '../../widgets/report_messages_section.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/review_reason.dart';
+import 'barangay_all_reports_tab.dart';
 
 /// The barangay Reports item: read-only, because the MDRRMO is the only
 /// verifier. One tab per kind of report, for the official's own barangay.
 class BarangayReportsTab extends StatelessWidget {
+  final String barangay;
+
+  /// Fires when a report of this barangay changes.
+  final Listenable changes;
   final List<CommunityReport> reports;
   final List<BarangayQuickReport> quickReports;
   final bool loading;
@@ -24,6 +29,8 @@ class BarangayReportsTab extends StatelessWidget {
 
   const BarangayReportsTab({
     super.key,
+    required this.barangay,
+    required this.changes,
     required this.reports,
     required this.quickReports,
     required this.loading,
@@ -34,11 +41,14 @@ class BarangayReportsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
+              Tab(text: AppStrings.barangayAllReports),
               Tab(text: AppStrings.barangayCommunityReports),
               Tab(text: AppStrings.barangayQuickReports),
             ],
@@ -46,13 +56,14 @@ class BarangayReportsTab extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
+                BarangayAllReportsTab(barangay: barangay, changes: changes),
                 _ReportList(
                   onRefresh: onRefresh,
                   loading: loading,
                   empty: 'No community reports yet.',
                   children: [
                     for (final report in reports)
-                      _CommunityCard(
+                      BarangayCommunityCard(
                         key: ValueKey('report-${report.id}'),
                         report: report,
                       ),
@@ -65,7 +76,7 @@ class BarangayReportsTab extends StatelessWidget {
                   empty: 'No Quick Reports yet.',
                   children: [
                     for (final report in quickReports)
-                      _QuickCard(
+                      BarangayQuickCard(
                         key: ValueKey('quick-${report.id}'),
                         report: report,
                       ),
@@ -153,10 +164,10 @@ class _Line extends StatelessWidget {
   }
 }
 
-class _CommunityCard extends StatelessWidget {
+class BarangayCommunityCard extends StatelessWidget {
   final CommunityReport report;
 
-  const _CommunityCard({super.key, required this.report});
+  const BarangayCommunityCard({super.key, required this.report});
 
   @override
   Widget build(BuildContext context) {
@@ -195,16 +206,16 @@ class _CommunityCard extends StatelessWidget {
   }
 }
 
-class _QuickCard extends StatefulWidget {
+class BarangayQuickCard extends StatefulWidget {
   final BarangayQuickReport report;
 
-  const _QuickCard({super.key, required this.report});
+  const BarangayQuickCard({super.key, required this.report});
 
   @override
-  State<_QuickCard> createState() => _QuickCardState();
+  State<BarangayQuickCard> createState() => _BarangayQuickCardState();
 }
 
-class _QuickCardState extends State<_QuickCard> {
+class _BarangayQuickCardState extends State<BarangayQuickCard> {
   Future<String>? _photo;
 
   @override

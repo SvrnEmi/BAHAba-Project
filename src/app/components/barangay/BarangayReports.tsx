@@ -80,27 +80,30 @@ function ErrorBox({ text }: { text: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: string | null }) {
+export function StatusBadge({ status }: { status: string | null }) {
   if (isApprovedStatus(status)) return <span className="risk-badge risk-badge-low is-compact"><CheckCircle size={12} aria-hidden="true" /> Approved</span>;
   if (status === "rejected") return <span className="risk-badge risk-badge-high is-compact"><XCircle size={12} aria-hidden="true" /> Rejected</span>;
   return <span className="risk-badge risk-badge-medium is-compact"><Clock size={12} aria-hidden="true" /> {STRINGS.barangayReports.pending}</span>;
 }
 
-export type ReportsView = "community" | "quick";
+export type ReportsView = "all" | "community" | "quick";
 
 /** The barangay Reports item: read-only, with one tab per kind of report. */
 export function BarangayReportsPage({
   view,
   onView,
+  all,
   community,
   quick,
 }: {
   view: ReportsView;
   onView: (view: ReportsView) => void;
+  all: ReactNode;
   community: ReactNode;
   quick: ReactNode;
 }) {
   const views: Array<{ id: ReportsView; label: string }> = [
+    { id: "all", label: STRINGS.barangayReports.all },
     { id: "community", label: STRINGS.barangayReports.community },
     { id: "quick", label: STRINGS.barangayReports.quick },
   ];
@@ -116,7 +119,7 @@ export function BarangayReportsPage({
           </button>
         ))}
       </div>
-      {view === "community" ? community : quick}
+      {view === "all" ? all : view === "community" ? community : quick}
     </div>
   );
 }
@@ -222,7 +225,6 @@ export function ReportThumb({ src, alt = "Photo sent with the report" }: { src: 
 }
 
 function ReportCard({ report, hasNew, children }: { report: BarangayReport; hasNew: boolean; children?: ReactNode }) {
-  const hasCoords = report.lat != null && report.lng != null;
   const summary = (
     <span className="block space-y-1">
       <span className="flex flex-wrap items-center gap-1.5">
@@ -240,6 +242,15 @@ function ReportCard({ report, hasNew, children }: { report: BarangayReport; hasN
 
   return (
     <DisclosureCard id={`report-${report.id}`} summary={summary} label={`Report at ${report.location?.trim() || "unknown location"}, ${report.status}. Show details`}>
+      <ReportDetails report={report}>{children}</ReportDetails>
+    </DisclosureCard>
+  );
+}
+
+/** A community report's full details, with room for its thread and advisories. */
+export function ReportDetails({ report, children }: { report: BarangayReport; children?: ReactNode }) {
+  const hasCoords = report.lat != null && report.lng != null;
+  return (
       <div className="space-y-3 border-t pt-3">
         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>By {displayReporterName(report.user_name)}</p>
         {report.description && <p className="whitespace-pre-wrap break-words text-sm font-normal">{report.description}</p>}
@@ -260,7 +271,6 @@ function ReportCard({ report, hasNew, children }: { report: BarangayReport; hasN
         <ReviewReasons report={report} />
         {children}
       </div>
-    </DisclosureCard>
   );
 }
 
@@ -335,7 +345,7 @@ export function QuickReportsSection({
   );
 }
 
-function QuickReportCard({ row }: { row: BarangayQuickReport }) {
+export function QuickReportCard({ row }: { row: BarangayQuickReport }) {
   const flagged = !!row.flagged_false;
   const level = waterLevelInfo(row.water_level);
   const hasCoords = row.lat != null && row.lng != null && Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lng));

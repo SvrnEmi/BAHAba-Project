@@ -73,6 +73,7 @@ class AppStrings {
   // Barangay Reports
   static const barangayReportsNote =
       'Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.';
+  static const barangayAllReports = 'All reports';
   static const barangayCommunityReports = 'Community reports';
   static const barangayQuickReports = 'Quick reports';
   static const barangayPending = 'Pending (waiting for MDRRMO)';

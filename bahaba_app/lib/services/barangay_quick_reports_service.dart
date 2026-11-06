@@ -84,6 +84,17 @@ class BarangayQuickReportsService {
     return rows.map<BarangayQuickReport>(BarangayQuickReport.fromRow).toList();
   }
 
+  /// One report of the barangay. Throws if it is gone.
+  Future<BarangayQuickReport> fetchOne(Object id, String barangay) async {
+    final row = await _client
+        .from('quick_reports')
+        .select(_columns)
+        .eq('id', id)
+        .eq('barangay', barangay)
+        .single();
+    return BarangayQuickReport.fromRow(row);
+  }
+
   /// Calls [onChange] on any change the official may see (RLS limits it to
   /// their barangay). Remove the returned channel with [unsubscribe].
   RealtimeChannel subscribe(void Function() onChange) {

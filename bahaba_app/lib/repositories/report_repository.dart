@@ -90,6 +90,17 @@ class ReportRepository {
     return rows.map<CommunityReport>(_fromRow).toList();
   }
 
+  /// One report of the barangay. Throws if it is gone.
+  Future<CommunityReport> fetchOneInBarangay(int id, String barangay) async {
+    final row = await _client
+        .from('community_reports')
+        .select(columns)
+        .eq('id', id)
+        .eq('barangay', barangay)
+        .single();
+    return _fromRow(row);
+  }
+
   Future<List<CommunityReport>> getByStatus(ReportStatus status) async {
     final rows = await _client
         .from('community_reports')

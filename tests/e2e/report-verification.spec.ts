@@ -2,7 +2,7 @@ import { expect, test, type BrowserContext } from "@playwright/test";
 import { PopupQueue, catchUpReports, isPopupEvent, popupKey, type PopupReport } from "../../src/lib/reportPopups";
 
 /*
- * Barangay officials verifying reports, the resident "Posted reports" feed and
+ * Barangay officials reading reports, the resident "Posted reports" feed and
  * the verified-report pop-ups, against a mocked Supabase. Realtime is not
  * mocked: the pop-up rules are tested directly through PopupQueue.
  */
@@ -84,62 +84,23 @@ async function mock(context: BrowserContext, role: "barangay" | "resident", seed
 
 const tab = (page: import("@playwright/test").Page, name: RegExp) => page.getByRole("tab", { name });
 
-test.describe("barangay verification", () => {
-  test("Verify Reports lists pending first, approves without a note, and shows the badge", async ({ context, page }) => {
+test.describe("barangay officials cannot verify", () => {
+  test("community reports have no approve or reject buttons and nothing is updated", async ({ context, page }) => {
     const db = await mock(context, "barangay", { reports: [report(1, "rejected"), report(2, "approved"), report(3, "pending")] });
     await page.goto("/admin/barangay");
-    await expect(tab(page, /Verify Reports\s*1 pending/)).toBeVisible();
-    const headings = page.locator("[id^=report-] .font-bold");
-    await expect(headings.first()).toHaveText("Purok 3");
     await page.locator("#report-3 button").first().click();
     await expect(page.locator("#report-3").getByText("By Ana Reyes")).toBeVisible();
-    await page.locator("#report-3").getByRole("button", { name: "Approve" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Approve" }).click();
-    await expect.poll(() => db.patches.length).toBe(1);
-    expect(db.patches[0]).toEqual({ table: "community_reports", body: { status: "approved", approval_reason: null, rejection_reason: null } });
+    await expect(page.getByRole("button", { name: /^(Approve|Reject)$/ })).toHaveCount(0);
+    expect(db.patches).toEqual([]);
   });
 
-  test("rejecting needs a reason and shows the database error", async ({ context, page }) => {
-    await mock(context, "barangay", { reports: [report(3, "pending")], refuse: "Give a short reason for rejecting the report." });
-    await page.goto("/admin/barangay");
-    await page.locator("#report-3 button").first().click();
-    await page.locator("#report-3").getByRole("button", { name: "Reject" }).click();
-    const dialog = page.getByRole("dialog");
-    const confirm = dialog.getByRole("button", { name: "Reject" });
-    await expect(confirm).toBeDisabled();
-    await dialog.getByRole("combobox").selectOption({ index: 1 });
-    await confirm.click();
-    await expect(dialog.getByRole("alert")).toHaveText("Give a short reason for rejecting the report.");
-  });
-
-  test("Quick Reports: pending badge, approve, reject, and no MDRRMO-only actions", async ({ context, page }) => {
-    const db = await mock(context, "barangay", { quick: [quick(1, "approved"), quick(2, "pending"), quick(3, "pending"), quick(4, "rejected", { flagged_false: true, flag_reason: "Prank" })] });
-    await page.goto("/admin/barangay");
-    await expect(tab(page, /Quick Reports\s*2 pending/)).toBeVisible();
-    await tab(page, /Quick Reports/).first().click();
-    await expect(page.locator("article").first()).toContainText("Landmark 2");
-    await expect(page.getByRole("button", { name: /Flag as false/ })).toHaveCount(0);
-    await expect(page.getByText(/Block device/)).toHaveCount(0);
-    await expect(page.locator("#quick-report-4").getByRole("button")).toHaveCount(0);
-
-    await page.locator("#quick-report-2").getByRole("button", { name: "Approve" }).click();
-    await expect.poll(() => db.patches.length).toBe(1);
-    expect(db.patches[0]).toEqual({ table: "quick_reports", body: { status: "approved" } });
-
-    await page.locator("#quick-report-3").getByRole("button", { name: "Reject" }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("combobox").selectOption({ index: 1 });
-    await dialog.getByRole("button", { name: "Reject" }).click();
-    await expect.poll(() => db.patches.length).toBe(2);
-    expect(Object.keys(db.patches[1].body).sort()).toEqual(["rejection_reason", "status"]);
-  });
-
-  test("a refused Quick Report shows the database error on the card", async ({ context, page }) => {
-    await mock(context, "barangay", { quick: [quick(2, "pending")], refuse: "permission denied for table quick_reports" });
+  test("Quick Reports have no approve, reject, flag or block actions", async ({ context, page }) => {
+    await mock(context, "barangay", { quick: [quick(1, "approved"), quick(2, "pending"), quick(4, "rejected", { flagged_false: true, flag_reason: "Prank" })] });
     await page.goto("/admin/barangay");
     await tab(page, /Quick Reports/).first().click();
-    await page.locator("#quick-report-2").getByRole("button", { name: "Approve" }).click();
-    await expect(page.locator("#quick-report-2").getByRole("alert")).toHaveText("permission denied for table quick_reports");
+    await expect(page.locator("#quick-report-2")).toBeVisible();
+    for (const id of [1, 2, 4]) await expect(page.locator(`#quick-report-${id}`).getByRole("button")).toHaveCount(0);
+    await expect(page.getByText(/Flag as false|Block device/)).toHaveCount(0);
   });
 });
 

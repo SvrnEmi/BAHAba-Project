@@ -115,7 +115,7 @@ class CommunityReport {
   final String? adminReply;
   final String? adminReplyAt;
 
-  /// Why the barangay or MDRRMO approved the report. Supabase only (not in
+  /// Why the MDRRMO approved the report. Supabase only (not in
   /// the local SQLite cache, so not in toMap).
   final String? approvalReason;
 

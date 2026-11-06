@@ -252,7 +252,7 @@ export function CommunityReports() {
 
       if ((existingPendingReport ?? []).length > 0) {
         resetForm();
-        alert("Your report is already submitted. Please wait for your barangay or the MDRRMO to review it.");
+        alert("Your report is already submitted. Please wait for the MDRRMO to review it.");
         return;
       }
 
@@ -525,7 +525,7 @@ export function CommunityReports() {
             </div>
             <h3 className="text-lg font-semibold mb-2">Report Submitted</h3>
             <p className="text-sm text-gray-600 mb-6">
-              Your report has been submitted. Please wait for your barangay or the MDRRMO to approve it before it
+              Your report has been submitted. Please wait for the MDRRMO to approve it before it
               appears in the community feed.
             </p>
             <button

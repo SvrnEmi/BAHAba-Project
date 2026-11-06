@@ -66,7 +66,8 @@ import {
   type ReportStatusFilter,
   type ServerReportSort,
 } from "../../lib/reportServerQuery";
-import { ReportReviewDialog, ReportThumb, ReviewReasons } from "./barangay/BarangayReports";
+import { ReportThumb, ReviewReasons } from "./barangay/BarangayReports";
+import { ReportReviewDialog } from "./ReportReviewDialog";
 
 interface AuditLog {
   id: number;
@@ -372,7 +373,7 @@ export function MDRRMOAdminDashboard() {
       label: "Pending reports",
       value: pendingReports.length.toString(),
       icon: MapPin,
-      info: "Community reports from signed-in residents that no barangay admin or MDRRMO has approved or rejected yet.",
+      info: "Community reports from signed-in residents that the MDRRMO has not approved or rejected yet.",
     },
     {
       label: "Pending Quick Reports",

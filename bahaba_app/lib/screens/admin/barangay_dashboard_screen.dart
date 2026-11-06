@@ -591,7 +591,8 @@ class _BarangayAdminDashboardScreenState
           const SizedBox(height: 12),
           const _NoteBanner(
             color: AppColors.warning,
-            text: 'Reports are verified by MDRRMO Admin.',
+            text:
+                'Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.',
           ),
           const SizedBox(height: 12),
           if (_loading)

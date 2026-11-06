@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router";
 import { LogOut, Settings } from "lucide-react";
-import { Toaster, toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../lib/auth";
 import { subscribeToTable } from "../../lib/realtime";
@@ -201,7 +200,6 @@ export function BarangayAdminDashboard() {
         for (const r of rows) {
           if (r.status === "pending" && !knownQuickIds.current.has(String(r.id))) {
             const detail = `${waterLevelInfo(r.water_level)?.label ?? "Water level"}${r.landmark ? ` near ${r.landmark}` : ""}`;
-            toast.info(`New Quick Report in ${barangay}`, { description: detail });
             notifyBrowser(`New Quick Report - ${barangay}`, detail);
           }
         }
@@ -259,7 +257,6 @@ export function BarangayAdminDashboard() {
         setReports((current) => [report, ...current.filter((r) => r.id !== report.id)].sort((a, b) => toTime(b.timestamp) - toTime(a.timestamp)));
         if (payload.eventType === "INSERT") {
           const detail = `${waterLevelLabel(report.water_level)} at ${report.location?.trim() || "unknown location"}`;
-          if (report.status === "pending") toast.info(`New report to verify in ${barangay}`, { description: detail });
           notifyBrowser(`New flood report - ${barangay}`, detail);
         }
       }),
@@ -496,7 +493,6 @@ export function BarangayAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster position="top-center" richColors />
       {header}
 
       {/* Under 1024px: Recent updates collapses into a bar right under the header. */}
@@ -555,7 +551,6 @@ export function BarangayAdminDashboard() {
                     setReportsLoading(true);
                     void loadReports();
                   }}
-                  onUpdated={(updated) => setReports((current) => current.map((r) => (r.id === updated.id ? updated : r)))}
                 />
               ) : tab === "quick-reports" ? (
                 <QuickReportsSection
@@ -567,7 +562,6 @@ export function BarangayAdminDashboard() {
                     setQuickLoading(true);
                     void loadQuick();
                   }}
-                  onChanged={() => void loadQuick()}
                 />
               ) : tab === "field-observations" ? (
                 <BarangayObservations barangay={barangay} now={now} />

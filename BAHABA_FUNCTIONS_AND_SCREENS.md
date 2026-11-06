@@ -42,7 +42,7 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
  - View resident, alert, report, and water-level statistics for the Barangay.
  - Draft and submit an advisory, warning, or critical alert.
  - View whether each alert is published or withdrawn.
- - View community reports associated with the Barangay dashboard.
+ - View community and Quick Reports for the Barangay (read-only). Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.
  - Preview an alert (push text with its PAGASA color and label) and confirm before publishing.
 
  Barangay alerts are published immediately to residents of that barangay (the server sets the target barangay, source and status; limit 5 per barangay per hour). The barangay admin can withdraw their own alert with a reason; MDRRMO can edit, withdraw, republish or delete any alert.

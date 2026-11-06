@@ -1,23 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CheckCircle, Clock, Droplets, Flag, ImageOff, Loader, MapPin, Phone, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle, Clock, Droplets, Flag, ImageOff, MapPin, Phone, RefreshCw, XCircle } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../../lib/reportMessages";
 import { NewDot, ReportMessages } from "../ReportMessages";
 import { waterLevelInfo } from "../../../lib/quickReport";
 import { displayReporterName, waterLevelLabel } from "../../../lib/reports";
-import { errorMessage, formatManilaDateTime } from "../../../lib/barangayAdmin";
-import { REPORT_APPROVE_REASONS, REPORT_REJECT_REASONS } from "../../../lib/alerts";
+import { formatManilaDateTime } from "../../../lib/barangayAdmin";
 import { DisclosureCard } from "../alerts/AlertDisclosure";
-import { ReasonDialog } from "../ReasonDialog";
-import { writeAuditLog } from "../../../lib/audit";
 import { queryReports, type ReportSort } from "../../../lib/reportQuery";
 import { ReportQueryBar } from "../ReportQueryBar";
 
 /*
- * Barangay admin review, own barangay only. Community reports: approve (with
- * an optional note) or reject (reason required), and a message thread with the
- * resident. Quick Reports: approve or reject (reason required). Deleting,
- * flagging as false and blocking a device stay with the MDRRMO.
+ * Barangay admin reports, own barangay only and read-only: the MDRRMO is the
+ * only verifier. Officials can read reports and message the resident.
  */
 
 export type BarangayReport = {
@@ -80,9 +75,6 @@ const pendingFirst = <T extends { status: string | null }>(rows: T[]): T[] => {
   return [...rows].sort((a, b) => rank(a.status) - rank(b.status));
 };
 
-/** The database allows at most 300 characters in quick_reports.rejection_reason. */
-const QUICK_REASON_MAX = 300;
-
 function ErrorBox({ text }: { text: string }) {
   return (
     <p role="alert" className="bg-white px-3 py-2 text-sm" style={{ borderLeft: "4px solid var(--risk-high)", color: "var(--text-primary)" }}>
@@ -106,7 +98,6 @@ export function CommunityReportsSection({
   filter,
   onFilter,
   onRetry,
-  onUpdated,
 }: {
   barangay: string;
   userId: string | null;
@@ -116,9 +107,7 @@ export function CommunityReportsSection({
   filter: ReportFilter;
   onFilter: (f: ReportFilter) => void;
   onRetry: () => void;
-  onUpdated: (report: BarangayReport) => void;
 }) {
-  const [reviewing, setReviewing] = useState<{ report: BarangayReport; decision: "approved" | "rejected" } | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<ReportSort>("newest");
   const { latest, update: updateLatest } = useLatestMessages(reports.filter((r) => r.barangay === barangay).map((r) => r.id));
@@ -167,12 +156,7 @@ export function CommunityReportsSection({
         <ul className="grid gap-3 xl:grid-cols-2 xl:items-start">
           {visible.map((r) => (
             <li key={r.id}>
-              <ReportCard
-                report={r}
-                hasNew={newIds.has(r.id)}
-                onApprove={() => setReviewing({ report: r, decision: "approved" })}
-                onReject={() => setReviewing({ report: r, decision: "rejected" })}
-              >
+              <ReportCard report={r} hasNew={newIds.has(r.id)}>
                 {/* Own barangay only; RLS also hides other barangays' threads. Works on every status. */}
                 {r.barangay === barangay && (
                   <ReportMessages reportId={r.id} viewerRole="barangay" userId={userId} latest={latest[r.id]} onLatest={updateLatest} />
@@ -182,78 +166,8 @@ export function CommunityReportsSection({
           ))}
         </ul>
       )}
-
-      {reviewing && (
-        <ReportReviewDialog
-          report={reviewing.report}
-          decision={reviewing.decision}
-          optionalNote={reviewing.decision === "approved"}
-          onClose={() => setReviewing(null)}
-          onSave={async (reason) => {
-            const values =
-              reviewing.decision === "approved"
-                ? { status: "approved", approval_reason: reason || null, rejection_reason: null }
-                : { status: "rejected", rejection_reason: reason, approval_reason: null };
-            onUpdated(await updateReport(barangay, reviewing.report.id, values));
-            // Logged for the MDRRMO review-time analytics; a refused log never undoes the review.
-            void writeAuditLog(
-              reviewing.decision === "approved" ? "REPORT_APPROVED" : "REPORT_REJECTED",
-              `Barangay admin (${barangay})`,
-              `Report #${reviewing.report.id} ${reviewing.decision}${reason ? `: ${reason}` : ""}`,
-            );
-            setReviewing(null);
-          }}
-        />
-      )}
     </div>
   );
-}
-
-/**
- * Approve (approval_reason, 5-500 characters, or optional with [optionalNote])
- * or reject (rejection_reason, at least 3 characters) with ready messages.
- */
-export function ReportReviewDialog({
-  report,
-  decision,
-  optionalNote = false,
-  onClose,
-  onSave,
-}: {
-  report: { location: string | null; user_name: string | null };
-  decision: "approved" | "rejected";
-  optionalNote?: boolean;
-  onClose: () => void;
-  onSave: (reason: string) => Promise<void>;
-}) {
-  const approve = decision === "approved";
-  return (
-    <ReasonDialog
-      title={approve ? "Approve report" : "Reject report"}
-      subtitle={`${report.location?.trim() || "Unknown location"} · by ${displayReporterName(report.user_name)}`}
-      presets={approve ? REPORT_APPROVE_REASONS : REPORT_REJECT_REASONS}
-      confirmLabel={approve ? "Approve" : "Reject"}
-      danger={!approve}
-      minLength={approve ? 5 : 3}
-      maxLength={500}
-      optional={optionalNote}
-      onClose={onClose}
-      onConfirm={onSave}
-    />
-  );
-}
-
-/** Scoped to the admin's barangay; RLS refusals (0 rows) are reported as errors. */
-async function updateReport(barangay: string, id: number, values: Record<string, unknown>): Promise<BarangayReport> {
-  const { data, error } = await supabase
-    .from("community_reports")
-    .update(values)
-    .eq("id", id)
-    .eq("barangay", barangay)
-    .select(REPORT_COLUMNS);
-  if (error) throw error;
-  if (!data?.length) throw new Error("The database did not save the change (this report is not in your barangay).");
-  return data[0] as unknown as BarangayReport;
 }
 
 /** Small lazy-loaded thumbnail; opens the full photo in a new tab. */
@@ -273,19 +187,7 @@ export function ReportThumb({ src, alt = "Photo sent with the report" }: { src: 
   );
 }
 
-function ReportCard({
-  report,
-  hasNew,
-  onApprove,
-  onReject,
-  children,
-}: {
-  report: BarangayReport;
-  hasNew: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-  children?: ReactNode;
-}) {
+function ReportCard({ report, hasNew, children }: { report: BarangayReport; hasNew: boolean; children?: ReactNode }) {
   const hasCoords = report.lat != null && report.lng != null;
   const summary = (
     <span className="block space-y-1">
@@ -322,18 +224,6 @@ function ReportCard({
           )}
         </div>
         <ReviewReasons report={report} />
-        <div className="flex flex-wrap gap-2 pt-1">
-          {!isApprovedStatus(report.status) && (
-            <button type="button" className="clay-btn clay-btn-primary" onClick={onApprove}>
-              <CheckCircle size={16} aria-hidden="true" /> Approve
-            </button>
-          )}
-          {report.status !== "rejected" && (
-            <button type="button" className="clay-btn clay-btn-secondary" onClick={onReject}>
-              <XCircle size={16} aria-hidden="true" /> Reject
-            </button>
-          )}
-        </div>
         {children}
       </div>
     </DisclosureCard>
@@ -365,17 +255,14 @@ export function QuickReportsSection({
   loading,
   error,
   onRetry,
-  onChanged,
 }: {
   barangay: string;
   rows: BarangayQuickReport[];
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  onChanged: () => void;
 }) {
   const [filter, setFilter] = useState<ReportFilter>("all");
-  const [rejecting, setRejecting] = useState<BarangayQuickReport | null>(null);
   const visible = pendingFirst(rows.filter((r) => matches(r, filter)));
 
   return (
@@ -406,66 +293,16 @@ export function QuickReportsSection({
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {visible.map((row) => (
-            <QuickReportCard key={row.id} barangay={barangay} row={row} onChanged={onChanged} onReject={() => setRejecting(row)} />
+            <QuickReportCard key={row.id} row={row} />
           ))}
         </div>
-      )}
-
-      {rejecting && (
-        <ReasonDialog
-          title="Reject Quick Report"
-          subtitle={rejecting.landmark?.trim() || rejecting.barangay || "Location shared"}
-          presets={REPORT_REJECT_REASONS}
-          confirmLabel="Reject"
-          danger
-          minLength={3}
-          maxLength={QUICK_REASON_MAX}
-          fieldLabel="Reason"
-          onClose={() => setRejecting(null)}
-          onConfirm={async (reason) => {
-            await updateQuickReport(barangay, rejecting.id, { status: "rejected", rejection_reason: reason });
-            setRejecting(null);
-            onChanged();
-          }}
-        />
       )}
     </div>
   );
 }
 
-/** Only status and rejection_reason; RLS refusals (0 rows) are reported as errors. */
-async function updateQuickReport(barangay: string, id: BarangayQuickReport["id"], values: { status: string; rejection_reason?: string }) {
-  const { data, error } = await supabase.from("quick_reports").update(values).eq("id", id).eq("barangay", barangay).select("id");
-  if (error) throw error;
-  if (!data?.length) throw new Error("The database did not save the change (this report is not in your barangay).");
-}
-
-function QuickReportCard({
-  barangay,
-  row,
-  onChanged,
-  onReject,
-}: {
-  barangay: string;
-  row: BarangayQuickReport;
-  onChanged: () => void;
-  onReject: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+function QuickReportCard({ row }: { row: BarangayQuickReport }) {
   const flagged = !!row.flagged_false;
-  const approve = async () => {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await updateQuickReport(barangay, row.id, { status: "approved" });
-      onChanged();
-    } catch (err) {
-      setActionError(errorMessage(err, "Unable to approve this report."));
-    } finally {
-      setBusy(false);
-    }
-  };
   const level = waterLevelInfo(row.water_level);
   const hasCoords = row.lat != null && row.lng != null && Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lng));
   return (
@@ -518,21 +355,6 @@ function QuickReportCard({
       )}
       {flagged && row.flag_reason?.trim() && (
         <p className="text-sm"><span className="font-semibold">MDRRMO note:</span> {row.flag_reason}</p>
-      )}
-      {actionError && <ErrorBox text={actionError} />}
-      {!flagged && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          {!isApprovedStatus(row.status) && (
-            <button type="button" className="clay-btn clay-btn-primary" disabled={busy} onClick={() => void approve()}>
-              {busy ? <Loader size={16} className="animate-spin" aria-hidden="true" /> : <CheckCircle size={16} aria-hidden="true" />} Approve
-            </button>
-          )}
-          {row.status !== "rejected" && (
-            <button type="button" className="clay-btn clay-btn-secondary" disabled={busy} onClick={onReject}>
-              <XCircle size={16} aria-hidden="true" /> Reject
-            </button>
-          )}
-        </div>
       )}
     </article>
   );

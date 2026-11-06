@@ -16,7 +16,6 @@ export function ReasonDialog({
   minLength = 3,
   maxLength = 500,
   fieldLabel = "Reason (shown to the resident)",
-  optional = false,
   onConfirm,
   onClose,
 }: {
@@ -28,8 +27,6 @@ export function ReasonDialog({
   minLength?: number;
   maxLength?: number;
   fieldLabel?: string;
-  /** The message may be left empty; onConfirm then gets "". */
-  optional?: boolean;
   /** Throw to show the error in the dialog; resolve to close it. */
   onConfirm: (reason: string) => Promise<void>;
   onClose: () => void;
@@ -43,7 +40,7 @@ export function ReasonDialog({
   const isOther = choice === OTHER_REASON;
 
   const reason = (isOther ? text : [choice, text.trim()].filter(Boolean).join(" - ")).trim();
-  const valid = optional ? reason.length <= maxLength : !!choice && reason.length >= minLength && reason.length <= maxLength;
+  const valid = !!choice && reason.length >= minLength && reason.length <= maxLength;
 
   useEffect(() => {
     selectRef.current?.focus();
@@ -92,17 +89,17 @@ export function ReasonDialog({
           </select>
         </label>
         <label className="block">
-          <span className="clay-label">{isOther && !optional ? `${fieldLabel} (required)` : `Add a note (optional)`}</span>
+          <span className="clay-label">{isOther ? `${fieldLabel} (required)` : `Add a note (optional)`}</span>
           <textarea
             className="clay-input min-h-24"
             value={text}
             maxLength={maxLength}
-            disabled={busy || (!choice && !optional)}
+            disabled={busy || !choice}
             onChange={(e) => setText(e.target.value)}
             aria-describedby={`${id}-hint`}
           />
           <span id={`${id}-hint`} className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>
-            {isOther && !optional ? `At least ${minLength} characters. ` : ""}
+            {isOther ? `At least ${minLength} characters. ` : ""}
             {reason.length}/{maxLength}
           </span>
         </label>

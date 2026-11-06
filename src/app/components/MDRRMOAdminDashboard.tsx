@@ -26,6 +26,7 @@ import { playNotificationSound, readAdminPopupPrefs } from "../../lib/adminPrefs
 import { QuickReportsPanel, useQuickReportPendingCount } from "./QuickReportsPanel";
 import { RecentUpdatesBar, RecentUpdatesColumn, useRecentUpdates, type FeedAlert, type UpdateFilter, type UpdateItem } from "./RecentUpdatesPanel";
 import { NewDot, ReportMessages } from "./ReportMessages";
+import { ReportAdvisoryPanel } from "./ReportAdvisories";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../lib/reportMessages";
 import { ADMIN_TABS, MDRRMO_DEFAULT_TAB, MDRRMO_OTHER_TABS, type AdminTabId, type MdrrmoTabId } from "../../lib/adminNav";
 import { writeAuditLog } from "../../lib/audit";
@@ -1177,6 +1178,7 @@ export function MDRRMOAdminDashboard() {
                                 legacyReply={{ body: report.admin_reply, at: report.admin_reply_at }}
                                 canDelete
                               />
+                              <ReportAdvisoryPanel reportId={report.id} userId={session?.user.id ?? null} canDeleteAny />
                             </div>
                           </DisclosureCard>
                         </li>

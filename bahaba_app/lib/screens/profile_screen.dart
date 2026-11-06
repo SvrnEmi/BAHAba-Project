@@ -18,6 +18,7 @@ import '../widgets/flat_status_card.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../services/app_update_service.dart';
 import '../widgets/app_release_dialogs.dart';
+import '../widgets/report_advisories_section.dart';
 import '../widgets/report_messages_section.dart';
 import '../widgets/report_status_badge.dart';
 import '../widgets/review_reason.dart';
@@ -856,6 +857,7 @@ class _MyReportItem extends StatelessWidget {
             ],
           ),
           ReviewReason(report: report),
+          if (report.id != null) ReportAdvisoryList(reportId: report.id!),
           if (report.id != null)
             // The thread also shows the old single reply as its first message.
             ReportMessagesSection(

@@ -6,6 +6,9 @@ import { fetchPostedReport, fetchPostedReports, reportPhotoUrl, type PostedRepor
 import { waterLevelLabel } from "../../lib/reports";
 import { errorMessage, formatManilaDateTime, relativeTime, toTime } from "../../lib/barangayAdmin";
 import { STRINGS } from "../../lib/strings";
+import { useAuth } from "../../lib/auth";
+import { useReportAdvisories } from "../../lib/reportAdvisories";
+import { AdvisoryList, ReportAdvisoryList } from "./ReportAdvisories";
 
 const T = STRINGS.posted;
 
@@ -17,6 +20,7 @@ export function PostedReports({ barangay }: { barangay: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const run = useRef(0);
+  const { rows: advisories } = useReportAdvisories((rows ?? []).map((report) => report.id));
 
   const load = useCallback(async () => {
     if (!barangay) return;
@@ -89,6 +93,9 @@ export function PostedReports({ barangay }: { barangay: string | null }) {
                   </span>
                   <ChevronRight size={18} className="shrink-0" aria-hidden="true" />
                 </button>
+                <div className="mt-2 empty:mt-0">
+                  <AdvisoryList advisories={advisories.filter((a) => a.report_id === report.id)} />
+                </div>
               </li>
             );
           })}
@@ -119,6 +126,8 @@ function Thumbnail({ path }: { path: string }) {
 export function PostedReportPage() {
   const { id } = useParams();
   const reportId = Number(id);
+  const { session } = useAuth();
+  const userId = session?.user.id ?? null;
   const [state, setState] = useState<{ kind: "loading" } | { kind: "missing" } | { kind: "failed"; error: string } | { kind: "report"; report: PostedReport }>({ kind: "loading" });
   const [photoFailed, setPhotoFailed] = useState(false);
 
@@ -129,7 +138,7 @@ export function PostedReportPage() {
       setState({ kind: "missing" });
       return;
     }
-    fetchPostedReport(reportId).then(
+    fetchPostedReport(reportId, userId).then(
       (report) => {
         if (!cancelled) setState(report ? { kind: "report", report } : { kind: "missing" });
       },
@@ -140,7 +149,7 @@ export function PostedReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [reportId]);
+  }, [reportId, userId]);
 
   return (
     <div className="p-4">
@@ -156,6 +165,7 @@ export function PostedReportPage() {
       ) : (
         <article className="clay space-y-3 p-5">
           <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{state.report.location?.trim() || T.unknownLocation}</h1>
+          {state.report.status !== "approved" && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{STRINGS.advisory.ownNote}</p>}
           <p className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             <Droplets size={16} aria-hidden="true" /> {waterLevelLabel(state.report.water_level)}
           </p>
@@ -174,6 +184,7 @@ export function PostedReportPage() {
             ) : (
               <img src={reportPhotoUrl(state.report.photo_path)} alt={T.photoAlt} className="max-h-96 w-full rounded-2xl object-cover" onError={() => setPhotoFailed(true)} />
             ))}
+          <ReportAdvisoryList reportId={state.report.id} />
         </article>
       )}
     </div>

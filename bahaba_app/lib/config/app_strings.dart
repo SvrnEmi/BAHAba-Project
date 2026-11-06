@@ -77,6 +77,31 @@ class AppStrings {
   static const barangayQuickReports = 'Quick reports';
   static const barangayPending = 'Pending (waiting for MDRRMO)';
 
+  // Advisories
+  static const advisoryTitle = 'Advisory';
+  static const advisoryCommentLabel = 'Comment:';
+  static const advisoryCommentHelp =
+      'private, between you and the reporter, in the message thread.';
+  static const advisoryAdvisoryLabel = 'Advisory:';
+  static const advisoryAdvisoryHelp =
+      'public, shown on the posted report to residents once the report is verified.';
+  static const advisoryPlaceholder = 'Write an advisory for residents';
+  static const advisoryPost = 'Post advisory';
+  static const advisoryPosting = 'Posting...';
+  static const advisoryPostFailed = 'Unable to post the advisory.';
+  static const advisoryDelete = 'Delete advisory';
+  static const advisoryDeleteFailed = 'Unable to delete the advisory.';
+  static const advisoryConfirmDelete =
+      'Delete this advisory? Residents will no longer see it.';
+  static const advisoryNone = 'No advisories yet.';
+  static String advisoryFrom(String name) => 'Advisory from $name';
+  static const advisoryPopupTitle =
+      'Your barangay posted an advisory on your report';
+  static String advisoryPopupMany(int count) =>
+      'Your barangay posted $count advisories on your reports';
+  static const advisoryOwnNote =
+      'This is your report. It is not posted to other residents.';
+
   // Posted reports
   static const postedTitle = 'Posted reports';
   static const postedDetailTitle = 'Flood report';

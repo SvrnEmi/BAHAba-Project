@@ -61,7 +61,9 @@ void main() {
     late Set<String> shown;
     int? viewing;
 
-    PopupQueue queue() => PopupQueue(
+    PopupQueue<PostedReport> queue() => PopupQueue(
+          keyOf: popupKey,
+          reportIdOf: (report) => report.id,
           isShown: shown.contains,
           markShown: shown.addAll,
           isViewing: (id) => id == viewing,

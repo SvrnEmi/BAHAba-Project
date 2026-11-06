@@ -9,6 +9,7 @@ import '../services/realtime_hub.dart';
 import '../theme/app_theme.dart';
 import '../utils/report_display.dart';
 import 'clay_container.dart';
+import 'report_advisories_section.dart';
 
 /// Approved reports of the resident's barangay, newest first. Reads on open,
 /// when the app returns to the foreground and on any community_reports change
@@ -140,8 +141,13 @@ class _PostedReportsSectionState extends State<PostedReportsSection>
                     TextStyle(color: AppColors.textSecondary, fontSize: 14)),
           )
         else
-          for (final row in _rows)
+          for (final row in _rows) ...[
             _PostedCard(report: row, barangay: barangay, now: now),
+            ReportAdvisoryList(
+              key: ValueKey('advisories-${row.id}'),
+              reportId: row.id,
+            ),
+          ],
       ],
     );
   }

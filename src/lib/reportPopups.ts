@@ -83,24 +83,48 @@ export function catchUpReports(rows: PopupReport[], lastSeen: number | null, sho
   return rows.filter((row) => !shown.has(popupKey(row)));
 }
 
+/** Pop-ups for advisories are shown once per advisory id. */
+export const advisoryPopupKey = (advisory: { id: number }) => `advisory:${advisory.id}`;
+
+const ADVISORIES = "advisories";
+
+export const readAdvisoryLastSeen = (userId: string) => readLastSeenReportTime(userId, ADVISORIES);
+export const saveAdvisoryLastSeen = (userId: string, time: number) => saveLastSeenReportTime(userId, ADVISORIES, time);
+export const readShownAdvisoryIds = (userId: string) => readShownReportIds(userId, ADVISORIES);
+export const saveShownAdvisoryIds = (userId: string, shown: Set<string>) => saveShownReportIds(userId, ADVISORIES, shown);
+
+/** Advisories for the catch-up dialog, or null on the first launch (save, show nothing). */
+export function catchUpAdvisories<T extends { id: number }>(rows: T[], lastSeen: number | null, shown: Set<string>): T[] | null {
+  if (lastSeen == null) return null;
+  return rows.filter((row) => !shown.has(advisoryPopupKey(row)));
+}
+
 /** Waits [windowMs] after the first event, then shows everything collected as one dialog. */
-export class PopupQueue {
-  private waiting = new Map<string, PopupReport>();
+export class PopupQueue<T extends { id: number } = PopupReport> {
+  private waiting = new Map<string, T>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private open = false;
 
   constructor(
     private readonly options: {
+      /** Default: popupKey, for reports. */
+      keyOf?: (item: T) => string;
+      /** The report an item belongs to. Default: its own id. */
+      reportIdOf?: (item: T) => number;
       isShown: (key: string) => boolean;
       markShown: (keys: string[]) => void;
       isViewing: (reportId: number) => boolean;
-      show: (reports: PopupReport[], catchUp: boolean) => void;
+      show: (reports: T[], catchUp: boolean) => void;
       windowMs?: number;
     },
   ) {}
 
-  add(report: PopupReport) {
-    const key = popupKey(report);
+  private key(item: T) {
+    return this.options.keyOf ? this.options.keyOf(item) : popupKey(item as unknown as PopupReport);
+  }
+
+  add(report: T) {
+    const key = this.key(report);
     if (this.options.isShown(key)) return;
     this.waiting.set(key, report);
     if (!this.timer && !this.open) {
@@ -109,8 +133,8 @@ export class PopupQueue {
   }
 
   /** The catch-up dialog shows at once. */
-  addCatchUp(reports: PopupReport[]) {
-    for (const report of reports) this.waiting.set(popupKey(report), report);
+  addCatchUp(reports: T[]) {
+    for (const report of reports) this.waiting.set(this.key(report), report);
     this.flush(true);
   }
 
@@ -131,7 +155,8 @@ export class PopupQueue {
     this.timer = null;
     if (this.open || this.waiting.size === 0) return;
     const keys = [...this.waiting.keys()];
-    const reports = [...this.waiting.values()].filter((report) => !this.options.isViewing(report.id));
+    const reportIdOf = this.options.reportIdOf ?? ((item: T) => item.id);
+    const reports = [...this.waiting.values()].filter((report) => !this.options.isViewing(reportIdOf(report)));
     this.waiting.clear();
     this.options.markShown(keys);
     if (reports.length === 0) return;

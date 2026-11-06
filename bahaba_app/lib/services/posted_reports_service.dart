@@ -2,8 +2,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/community_report_model.dart';
 
-/// An approved community report as residents see it. The reporter's name is
-/// never read here: these screens say "Reported by a resident of {barangay}".
+/// An approved community report as residents see it, or the resident's own
+/// report at any status. The reporter's name is never read here: these screens say "Reported by a resident of {barangay}".
 class PostedReport {
   final int id;
   final String location;
@@ -49,7 +49,8 @@ class PostedReportsService {
   PostedReportsService._();
 
   static const _columns =
-      'id, location, water_level, description, photo_path, timestamp, barangay';
+      'id, location, water_level, description, photo_path, timestamp, barangay, '
+      'status';
   static const _popupColumns =
       'id, location, water_level, timestamp, barangay, user_id, status, '
       'rejection_reason';
@@ -77,14 +78,39 @@ class PostedReportsService {
     return rows.map<PostedReport>(PostedReport.fromRow).toList();
   }
 
+  /// An approved report, or the resident's own one even while it is pending.
   static Future<PostedReport?> fetchOne(int id) async {
+    final userId = _client.auth.currentUser?.id;
     final row = await _client
         .from('community_reports')
         .select(_columns)
         .eq('id', id)
-        .eq('status', 'approved')
+        .or(userId == null
+            ? 'status.eq.approved'
+            : 'status.eq.approved,user_id.eq.$userId')
         .maybeSingle();
     return row == null ? null : PostedReport.fromRow(row);
+  }
+
+  /// The resident's own reports, newest first.
+  static Future<Set<int>> ownReportIds(String userId) async {
+    final rows = await _client
+        .from('community_reports')
+        .select('id')
+        .eq('user_id', userId)
+        .order('timestamp', ascending: false)
+        .limit(200);
+    return {for (final row in rows) (row['id'] as num).toInt()};
+  }
+
+  static Future<bool> isOwnReport(int id, String userId) async {
+    final row = await _client
+        .from('community_reports')
+        .select('id')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .maybeSingle();
+    return row != null;
   }
 
   /// Newest reports a pop-up could be about: the barangay's approved ones and

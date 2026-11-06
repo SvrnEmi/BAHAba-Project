@@ -6,6 +6,7 @@ import '../../services/posted_reports_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/report_display.dart';
 import '../../widgets/clay_container.dart';
+import '../../widgets/report_advisories_section.dart';
 
 /// The full report, opened from Posted reports or a pop-up.
 class PostedReportScreen extends StatefulWidget {
@@ -78,6 +79,12 @@ class _PostedReportScreenState extends State<PostedReportScreen> {
                           : report.location,
                       style: AppText.heading(size: 18),
                     ),
+                    if (report.status != 'approved')
+                      const Text(
+                        AppStrings.advisoryOwnNote,
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 12),
+                      ),
                     const SizedBox(height: 6),
                     Text(
                       waterLevelLabel(report.waterLevel),
@@ -120,6 +127,7 @@ class _PostedReportScreenState extends State<PostedReportScreen> {
                         ),
                       ),
                     ],
+                    ReportAdvisoryList(reportId: report.id),
                   ],
                 ),
               ),

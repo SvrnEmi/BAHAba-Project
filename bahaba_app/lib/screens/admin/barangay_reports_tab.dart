@@ -8,6 +8,7 @@ import '../../services/posted_reports_service.dart';
 import '../../services/report_messages_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flat_status_card.dart';
+import '../../widgets/report_advisories_section.dart';
 import '../../widgets/report_messages_section.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/review_reason.dart';
@@ -187,6 +188,7 @@ class _CommunityCard extends StatelessWidget {
               reportId: report.id!,
               viewerRole: SenderRole.barangay,
             ),
+          if (report.id != null) ReportAdvisoryPanel(reportId: report.id!),
         ],
       ),
     );

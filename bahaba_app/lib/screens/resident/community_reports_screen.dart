@@ -13,6 +13,7 @@ import '../../repositories/report_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/clay_container.dart';
 import '../../widgets/flat_status_card.dart';
+import '../../widgets/report_advisories_section.dart';
 import '../../widgets/report_messages_section.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/review_reason.dart';
@@ -690,6 +691,8 @@ class _ReportCardState extends State<_ReportCard> {
                 ),
               ),
           ],
+          if (_open && report.id != null)
+            ReportAdvisoryList(reportId: report.id!),
           if (!_open)
             const SizedBox.shrink()
           else if (showMessages && report.id != null)

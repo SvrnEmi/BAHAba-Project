@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
@@ -131,8 +131,9 @@ export function VerifiedReportPopup() {
   );
 }
 
-function Frame({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+export function PopupFrame({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   useEffect(() => {
     ref.current?.focus();
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -141,8 +142,8 @@ function Frame({ title, children, onClose }: { title: string; children: ReactNod
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="report-popup-title" className="clay max-h-[85vh] w-full max-w-md space-y-3 overflow-y-auto p-6 outline-none">
-        <h2 id="report-popup-title" className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} className="clay max-h-[85vh] w-full max-w-md space-y-3 overflow-y-auto p-6 outline-none">
+        <h2 id={titleId} className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
         {children}
       </div>
     </div>
@@ -163,14 +164,14 @@ function SingleDialog({ report, userId, onClose, onOpen }: { report: PopupReport
   const rejected = report.status === "rejected";
   const title = rejected ? T.rejected : report.user_id === userId ? T.own : T.verified(report.barangay ?? "");
   return (
-    <Frame title={title} onClose={onClose}>
+    <PopupFrame title={title} onClose={onClose}>
       <p><Details report={report} /></p>
       {rejected && <p className="text-sm"><span className="font-semibold">{T.reason}</span> {report.rejection_reason?.trim() || T.noReason}</p>}
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
         <button type="button" className="clay-btn clay-btn-secondary" onClick={onClose}>{T.dismiss}</button>
         {!rejected && <button type="button" className="clay-btn clay-btn-primary" onClick={() => onOpen(`/reports/${report.id}`)}>{T.viewReport}</button>}
       </div>
-    </Frame>
+    </PopupFrame>
   );
 }
 
@@ -178,7 +179,7 @@ function ListDialog({ reports, barangay, userId, onClose, onOpen }: { reports: P
   const approved = reports.filter((r) => r.status === "approved");
   const title = approved.length === reports.length ? T.many(reports.length, barangay) : T.updates(reports.length);
   return (
-    <Frame title={title} onClose={onClose}>
+    <PopupFrame title={title} onClose={onClose}>
       <ul className="space-y-2">
         {reports.map((report) => (
           <li key={popupKey(report)} className="border-t pt-2">
@@ -204,6 +205,6 @@ function ListDialog({ reports, barangay, userId, onClose, onOpen }: { reports: P
           </button>
         )}
       </div>
-    </Frame>
+    </PopupFrame>
   );
 }

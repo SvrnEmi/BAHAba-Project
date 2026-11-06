@@ -41,18 +41,24 @@ List<PostedReport>? catchUpReports(
 
 /// Waits [window] after the first event, then shows everything collected as
 /// one dialog.
-class PopupQueue {
+class PopupQueue<T> {
+  final String Function(T item) keyOf;
+
+  /// The report an item belongs to.
+  final int Function(T item) reportIdOf;
   final bool Function(String key) isShown;
   final void Function(List<String> keys) markShown;
   final bool Function(int reportId) isViewing;
-  final void Function(List<PostedReport> reports, bool catchUp) show;
+  final void Function(List<T> items, bool catchUp) show;
   final Duration window;
 
-  final Map<String, PostedReport> _waiting = {};
+  final Map<String, T> _waiting = {};
   Timer? _timer;
   bool _open = false;
 
   PopupQueue({
+    required this.keyOf,
+    required this.reportIdOf,
     required this.isShown,
     required this.markShown,
     required this.isViewing,
@@ -60,8 +66,8 @@ class PopupQueue {
     this.window = popupWindow,
   });
 
-  void add(PostedReport report) {
-    final key = popupKey(report);
+  void add(T report) {
+    final key = keyOf(report);
     if (isShown(key)) return;
     _waiting[key] = report;
     if (_timer == null && !_open) {
@@ -70,9 +76,9 @@ class PopupQueue {
   }
 
   /// The catch-up dialog shows at once.
-  void addCatchUp(List<PostedReport> reports) {
+  void addCatchUp(List<T> reports) {
     for (final report in reports) {
-      _waiting[popupKey(report)] = report;
+      _waiting[keyOf(report)] = report;
     }
     _flush(true);
   }
@@ -95,7 +101,7 @@ class PopupQueue {
     if (_open || _waiting.isEmpty) return;
     final keys = _waiting.keys.toList();
     final reports =
-        _waiting.values.where((report) => !isViewing(report.id)).toList();
+        _waiting.values.where((item) => !isViewing(reportIdOf(item))).toList();
     _waiting.clear();
     markShown(keys);
     if (reports.isEmpty) return;
@@ -120,7 +126,9 @@ class VerifiedReportWatcher {
     required this.show,
   });
 
-  late final PopupQueue _queue = PopupQueue(
+  late final PopupQueue<PostedReport> _queue = PopupQueue(
+    keyOf: popupKey,
+    reportIdOf: (report) => report.id,
     isShown: _shown.contains,
     markShown: _remember,
     isViewing: (id) => PostedReportsService.viewingId == id,

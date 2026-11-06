@@ -1,8 +1,9 @@
 import { supabase } from "./supabase";
 
 /*
- * Approved community reports for residents. The reporter's name is never
- * selected here: these screens say "Reported by a resident of {barangay}".
+ * Approved community reports for residents, plus the resident's own report at
+ * any status. The reporter's name is never selected here: these screens say
+ * "Reported by a resident of {barangay}".
  */
 
 export type PostedReport = {
@@ -13,9 +14,10 @@ export type PostedReport = {
   photo_path: string | null;
   timestamp: string;
   barangay: string | null;
+  status: string;
 };
 
-const COLUMNS = "id, location, water_level, description, photo_path, timestamp, barangay";
+const COLUMNS = "id, location, water_level, description, photo_path, timestamp, barangay, status";
 const FEED_LIMIT = 20;
 
 /** Newer reports store a full URL; a bare path is resolved in the public bucket. */
@@ -36,12 +38,13 @@ export async function fetchPostedReports(barangay: string): Promise<PostedReport
   return (data ?? []) as PostedReport[];
 }
 
-export async function fetchPostedReport(id: number): Promise<PostedReport | null> {
+/** An approved report, or the resident's own one even while it is pending. */
+export async function fetchPostedReport(id: number, userId: string | null): Promise<PostedReport | null> {
   const { data, error } = await supabase
     .from("community_reports")
     .select(COLUMNS)
     .eq("id", id)
-    .eq("status", "approved")
+    .or(userId ? `status.eq.approved,user_id.eq.${userId}` : "status.eq.approved")
     .maybeSingle();
   if (error) throw error;
   return data as PostedReport | null;

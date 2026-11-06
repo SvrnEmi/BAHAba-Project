@@ -44,6 +44,7 @@ Barangay administrators manage the Barangay assigned to their authenticated prof
  - View whether each alert is published or withdrawn.
  - Open Reports, with Community reports and Quick reports tabs, for the Barangay (read-only). Reports are verified by the MDRRMO. Your barangay can view them, comment and post advisories.
  - Preview an alert (push text with its PAGASA color and label) and confirm before publishing.
+ - Post an advisory on a community report. A comment is private, between the official and the reporter. An advisory is public: residents see it on the posted report once the report is verified, and the reporter sees it at any status. The MDRRMO can also post advisories and delete any.
 
  Barangay alerts are published immediately to residents of that barangay (the server sets the target barangay, source and status; limit 5 per barangay per hour). The barangay admin can withdraw their own alert with a reason; MDRRMO can edit, withdraw, republish or delete any alert.
 

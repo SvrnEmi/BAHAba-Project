@@ -18,6 +18,7 @@ import '../../widgets/flat_status_card.dart';
 import '../../widgets/report_status_badge.dart';
 import '../../widgets/risk_badge.dart';
 import '../../widgets/brand_logo.dart';
+import '../../widgets/report_advisories_section.dart';
 import 'flood_events_tab.dart';
 
 /// MDRRMO Admin Dashboard — system oversight, analytics, alert broadcast,
@@ -937,6 +938,11 @@ class _VerifyReportsTabState extends State<_VerifyReportsTab> {
                           color: AppColors.danger,
                         ),
                       ),
+                    ),
+                  if (report.id != null)
+                    ReportAdvisoryPanel(
+                      reportId: report.id!,
+                      canDeleteAny: true,
                     ),
                   if (report.status == ReportStatus.approved) ...[
                     const SizedBox(height: 12),

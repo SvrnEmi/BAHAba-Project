@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 import '../../config/app_strings.dart';
 import '../../providers/app_state.dart';
 import '../../providers/resident_providers.dart';
+import '../../services/advisory_popups.dart';
 import '../../services/alerts_seen_store.dart';
 import '../../services/app_update_service.dart';
 import '../../services/posted_reports_service.dart';
 import '../../services/push_notification_service.dart';
 import '../../services/verified_report_popups.dart';
+import '../../widgets/advisory_dialog.dart';
 import '../../widgets/clay_bottom_nav.dart';
 import '../../widgets/verified_report_dialog.dart';
 import 'home_screen.dart';
@@ -53,6 +55,7 @@ class _MainShellState extends State<MainShell> {
   late final BarangayProvider _barangayProvider;
   late final AppState _appState;
   VerifiedReportWatcher? _reportWatcher;
+  AdvisoryWatcher? _advisoryWatcher;
 
   @override
   void initState() {
@@ -76,10 +79,42 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  void _openReport(int reportId) {
+    if (PostedReportsService.viewingId == reportId) return;
+    PushNotificationService.instance.navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => PostedReportScreen(reportId: reportId),
+      ),
+    );
+  }
+
+  /// One per signed-in resident; advisories do not depend on the barangay.
+  void _syncAdvisoryWatcher(String? userId) {
+    final current = _advisoryWatcher;
+    if (current?.userId == userId) return;
+    current?.stop();
+    _advisoryWatcher = null;
+    if (userId == null) return;
+    _advisoryWatcher = AdvisoryWatcher(
+      userId: userId,
+      show: (advisories) async {
+        final dialogContext =
+            PushNotificationService.instance.navigatorKey.currentContext;
+        if (!mounted || dialogContext == null) return;
+        await showAdvisoryDialog(
+          dialogContext,
+          advisories: advisories,
+          onView: _openReport,
+        );
+      },
+    )..start();
+  }
+
   /// Follows the resident's barangay, which can change in Profile.
   void _syncReportWatcher() {
     final barangay = _appState.currentUser?.barangay;
     final userId = AlertsSeenStore.currentUserId;
+    _syncAdvisoryWatcher(userId);
     final current = _reportWatcher;
     if (current?.barangay == barangay && current?.userId == userId) return;
     current?.stop();
@@ -133,6 +168,7 @@ class _MainShellState extends State<MainShell> {
   void dispose() {
     _appState.removeListener(_syncReportWatcher);
     _reportWatcher?.stop();
+    _advisoryWatcher?.stop();
     AppUpdateService.instance.detachHome();
     PushNotificationService.instance.detachResidentAlertsTab(_openAlertsTab);
     _alertProvider.stop();

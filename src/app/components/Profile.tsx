@@ -35,6 +35,7 @@ import { MDRRMO_ODIONGAN_NUMBER, NATIONAL_EMERGENCY_NUMBER, barangayHallNumber }
 import { waterLevelLabel } from "../../lib/reports";
 import { useLatestMessages } from "../../lib/reportMessages";
 import { ReportMessages } from "./ReportMessages";
+import { ReportAdvisoryList } from "./ReportAdvisories";
 
 type ProfileRow = {
   name: string;
@@ -754,6 +755,7 @@ function MyReports({
                 <span className="font-semibold">Why it was approved:</span> {report.approval_reason}
               </p>
             )}
+            <div className="mt-2 empty:mt-0"><ReportAdvisoryList reportId={report.id} /></div>
             <ReportMessages
               reportId={report.id}
               viewerRole="resident"

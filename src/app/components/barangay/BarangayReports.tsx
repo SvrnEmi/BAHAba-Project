@@ -3,6 +3,7 @@ import { CheckCircle, Clock, Droplets, Flag, ImageOff, MapPin, Phone, RefreshCw,
 import { supabase } from "../../../lib/supabase";
 import { getThreadLastSeen, hasNewMessage, useLatestMessages } from "../../../lib/reportMessages";
 import { NewDot, ReportMessages } from "../ReportMessages";
+import { ReportAdvisoryPanel } from "../ReportAdvisories";
 import { waterLevelInfo } from "../../../lib/quickReport";
 import { displayReporterName, waterLevelLabel } from "../../../lib/reports";
 import { formatManilaDateTime } from "../../../lib/barangayAdmin";
@@ -189,7 +190,10 @@ export function CommunityReportsSection({
               <ReportCard report={r} hasNew={newIds.has(r.id)}>
                 {/* Own barangay only; RLS also hides other barangays' threads. Works on every status. */}
                 {r.barangay === barangay && (
-                  <ReportMessages reportId={r.id} viewerRole="barangay" userId={userId} latest={latest[r.id]} onLatest={updateLatest} />
+                  <>
+                    <ReportMessages reportId={r.id} viewerRole="barangay" userId={userId} latest={latest[r.id]} onLatest={updateLatest} />
+                    <ReportAdvisoryPanel reportId={r.id} userId={userId} />
+                  </>
                 )}
               </ReportCard>
             </li>

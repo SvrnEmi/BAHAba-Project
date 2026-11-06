@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContext } from "@playwright/test";
-import { PopupQueue, catchUpReports, isPopupEvent, popupKey, type PopupReport } from "../../src/lib/reportPopups";
+import { PopupQueue, advisoryPopupKey, catchUpAdvisories, catchUpReports, isPopupEvent, popupKey, type PopupReport } from "../../src/lib/reportPopups";
 
 /*
  * Barangay officials reading reports, the resident "Posted reports" feed and
@@ -35,10 +35,14 @@ const quick = (id: number, status: string, extra: Row = {}): Row => ({
   reporter_name: "Ben", reporter_phone: null, status, rejection_reason: null, flagged_false: false, flag_reason: null, reviewed_by: null, reviewed_at: null, ...extra,
 });
 
-type Backend = { reports: Row[]; quick: Row[]; patches: Array<{ table: string; body: Row }>; refuse?: string };
+const advisory = (id: number, reportId: number, extra: Row = {}): Row => ({
+  id, report_id: reportId, barangay: BARANGAY, author_id: "official-2", author_role: "barangay", author_name: "Kap Reyes", body: `Advisory text ${id}`, created_at: minutesAgo(id), ...extra,
+});
 
-async function mock(context: BrowserContext, role: "barangay" | "resident", seed: Partial<Backend> = {}) {
-  const db: Backend = { reports: [], quick: [], patches: [], ...seed };
+type Backend = { reports: Row[]; quick: Row[]; advisories: Row[]; messages: Row[]; posts: Array<{ table: string; body: Row }>; patches: Array<{ table: string; body: Row }>; refuse?: string };
+
+async function mock(context: BrowserContext, role: "barangay" | "resident" | "mdrrmo", seed: Partial<Backend> = {}) {
+  const db: Backend = { reports: [], quick: [], advisories: [], messages: [], posts: [], patches: [], ...seed };
   await context.route(/supabase\.co/, (route) => route.abort());
   await context.route(/\/auth\/v1\/token/, (route) => route.fulfill({ json: session() }));
   await context.route(/\/auth\/v1\/user/, (route) => route.fulfill({ json: session().user }));
@@ -58,6 +62,32 @@ async function mock(context: BrowserContext, role: "barangay" | "resident", seed
       if (row) Object.assign(row, req.postDataJSON());
       return route.fulfill({ json: row ? [row] : [] });
     }
+    if (table === "report_advisories") {
+      if (req.method() === "POST") {
+        const body = req.postDataJSON() as Row;
+        db.posts.push({ table, body });
+        const row = advisory(900 + db.posts.length, Number(body.report_id), { author_id: ID, author_name: "Test", author_role: role, body: body.body, created_at: new Date().toISOString() });
+        db.advisories.push(row);
+        return route.fulfill({ status: 201, json: one ? row : [row] });
+      }
+      if (req.method() === "DELETE") {
+        const id = Number((url.searchParams.get("id") ?? "").replace("eq.", ""));
+        const row = db.advisories.find((a) => a.id === id);
+        db.advisories = db.advisories.filter((a) => a.id !== id);
+        return route.fulfill({ json: row ? [{ id }] : [] });
+      }
+      const wanted = (url.searchParams.get("report_id") ?? "").replace(/^in\.\(|\)$/g, "").split(",").map(Number);
+      return route.fulfill({ json: db.advisories.filter((a) => wanted.includes(Number(a.report_id))), headers });
+    }
+    if (table === "report_messages") {
+      if (req.method() === "POST") {
+        const body = req.postDataJSON() as Row;
+        db.posts.push({ table, body });
+        const row = { id: 700 + db.posts.length, sender_role: role, body: body.body, created_at: new Date().toISOString() };
+        return route.fulfill({ status: 201, json: one ? row : [row] });
+      }
+      return route.fulfill({ json: db.messages, headers });
+    }
     if (table === "profiles") {
       const row = { id: ID, role, name: "Test", email: "x@test.local", phone: "09170000000", barangay: BARANGAY };
       return route.fulfill({ json: one ? row : [row] });
@@ -65,11 +95,13 @@ async function mock(context: BrowserContext, role: "barangay" | "resident", seed
     if (table === "community_reports") {
       const wanted = url.searchParams.get("id");
       if (one && wanted) {
-        const row = db.reports.find((r) => `eq.${r.id}` === wanted && r.status === "approved");
+        const row = db.reports.find((r) => `eq.${r.id}` === wanted && (r.status === "approved" || r.user_id === ID));
         return route.fulfill({ json: row ?? null });
       }
       const status = url.searchParams.get("status");
-      const rows = status ? db.reports.filter((r) => `eq.${r.status}` === status) : db.reports;
+      const owner = url.searchParams.get("user_id");
+      const either = url.searchParams.get("or");
+      const rows = db.reports.filter((r) => (!status || `eq.${r.status}` === status) && (!owner || `eq.${r.user_id}` === owner) && (!wanted || `eq.${r.id}` === wanted) && (!either || r.status === "approved" || either.includes(`user_id.eq.${r.user_id}`)));
       return route.fulfill({ json: rows, headers });
     }
     if (table === "quick_reports") return route.fulfill({ json: db.quick, headers });
@@ -127,6 +159,166 @@ test.describe("barangay officials cannot verify", () => {
     await expect(page.locator("#quick-report-2")).toBeVisible();
     for (const id of [1, 2, 4]) await expect(page.locator(`#quick-report-${id}`).getByRole("button")).toHaveCount(0);
     await expect(page.getByText(/Flag as false|Block device/)).toHaveCount(0);
+  });
+});
+
+test.describe("advisories for staff", () => {
+  const open = async (page: import("@playwright/test").Page, id: number) => {
+    await page.locator(`#report-${id} button`).first().click();
+    return page.locator(`#report-${id}`);
+  };
+
+  test("a barangay official posts one, sending only report_id and body, and deletes only their own", async ({ context, page }) => {
+    const db = await mock(context, "barangay", { reports: [report(1, "pending")], advisories: [advisory(5, 1)] });
+    await page.goto("/admin/barangay");
+    const card = await open(page, 1);
+    await expect(card.getByText("private, between you and the reporter, in the message thread.")).toBeVisible();
+    await expect(card.getByText("public, shown on the posted report to residents once the report is verified.")).toBeVisible();
+    await expect(card.getByText("Kap Reyes · Barangay")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Delete advisory" })).toHaveCount(0);
+
+    const post = card.getByRole("button", { name: "Post advisory" });
+    const box = card.getByLabel("Advisory text");
+    await expect(post).toBeDisabled();
+    await box.fill("ab");
+    await expect(post).toBeDisabled();
+    await expect(card.getByText(/2\/300/)).toBeVisible();
+    await box.fill("  Avoid the bridge  ");
+    await post.click();
+    await expect.poll(() => db.posts.length).toBe(1);
+    expect(db.posts[0]).toEqual({ table: "report_advisories", body: { report_id: 1, body: "Avoid the bridge" } });
+    await expect(card.getByText("Avoid the bridge")).toBeVisible();
+    await expect(box).toHaveValue("");
+
+    page.on("dialog", (dialog) => void dialog.accept());
+    await expect(card.getByRole("button", { name: "Delete advisory" })).toHaveCount(1);
+    await card.getByRole("button", { name: "Delete advisory" }).click();
+    await expect(card.getByText("Avoid the bridge")).toHaveCount(0);
+    expect(db.advisories.map((a) => a.id)).toEqual([5]);
+  });
+
+  test("the private message thread still works for officials", async ({ context, page }) => {
+    const db = await mock(context, "barangay", { reports: [report(1, "pending")] });
+    await page.goto("/admin/barangay");
+    const card = await open(page, 1);
+    await card.getByRole("button", { name: /^Messages/ }).click();
+    await card.getByPlaceholder("Write a message").fill("Is the road passable?");
+    await card.getByRole("button", { name: /^Send/ }).click();
+    await expect.poll(() => db.posts.length).toBe(1);
+    expect(db.posts[0]).toEqual({ table: "report_messages", body: { report_id: 1, body: "Is the road passable?" } });
+  });
+
+  test("the MDRRMO can post on any report and delete any advisory", async ({ context, page }) => {
+    const db = await mock(context, "mdrrmo", { reports: [report(1, "pending")], advisories: [advisory(5, 1)] });
+    await page.goto("/admin/mdrrmo");
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click().catch(() => undefined);
+    await tab(page, /Verify Reports/).click();
+    const card = await open(page, 1);
+    await expect(card.getByRole("button", { name: "Approve" })).toBeVisible();
+    await card.getByLabel("Advisory text").fill("Stay away from the river");
+    await card.getByRole("button", { name: "Post advisory" }).click();
+    await expect.poll(() => db.posts.length).toBe(1);
+    page.on("dialog", (dialog) => void dialog.accept());
+    await expect(card.getByRole("button", { name: "Delete advisory" })).toHaveCount(2);
+    await card.getByRole("button", { name: "Delete advisory" }).last().click();
+    await expect(card.getByText("Advisory text 5")).toHaveCount(0);
+  });
+});
+
+test.describe("advisories for residents", () => {
+  test("the feed and the full report show them with the author's name and time", async ({ context, page }) => {
+    await mock(context, "resident", { reports: [report(1, "approved")], advisories: [advisory(5, 1)] });
+    await page.goto("/home");
+    const section = page.locator("#posted-reports");
+    await expect(section.getByText("Advisory from Kap Reyes")).toBeVisible();
+    await expect(section.getByText("Advisory text 5")).toBeVisible();
+    await section.getByRole("button").first().click();
+    await expect(page).toHaveURL(/\/reports\/1$/);
+    await expect(page.getByText("Advisory from Kap Reyes")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete advisory" })).toHaveCount(0);
+  });
+
+  test("the reporter sees them on their own pending report; other pending reports stay hidden", async ({ context, page }) => {
+    await mock(context, "resident", { reports: [report(1, "pending", { user_id: ID }), report(2, "pending")], advisories: [advisory(5, 1)] });
+    await page.goto("/reports/1");
+    await expect(page.getByRole("heading", { name: "Purok 1" })).toBeVisible();
+    await expect(page.getByText("This is your report. It is not posted to other residents.")).toBeVisible();
+    await expect(page.getByText("Advisory from Kap Reyes")).toBeVisible();
+    await page.goto("/reports/2");
+    await expect(page.getByText("This report is no longer posted.")).toBeVisible();
+  });
+});
+
+test.describe("advisory pop-up", () => {
+  const seenAdvisories = (ids: number[]) => [
+    [`last_seen_report_time:${ID}:advisories`, String(Date.now() - 3_600_000)],
+    [`shown_report_ids:${ID}:advisories`, JSON.stringify(ids.map((id) => `advisory:${id}`))],
+  ];
+  const own = () => report(1, "pending", { user_id: ID });
+
+  test("first launch saves and shows nothing", async ({ context, page }) => {
+    await mock(context, "resident", { reports: [own()], advisories: [advisory(5, 1)] });
+    await page.goto("/home");
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), `last_seen_report_time:${ID}:advisories`)).not.toBeNull();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("shows the exact title and text, opens the report, and shows once per advisory", async ({ context, page }) => {
+    await mock(context, "resident", { reports: [own()], advisories: [advisory(5, 1)] });
+    await context.addInitScript((entries) => {
+      if (!localStorage.getItem("seeded")) {
+        entries.forEach(([key, value]) => localStorage.setItem(key, value));
+        localStorage.setItem("seeded", "1");
+      }
+    }, seenAdvisories([]));
+    await page.goto("/home");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading")).toHaveText("Your barangay posted an advisory on your report");
+    await expect(dialog.getByText("Advisory text 5")).toBeVisible();
+    await dialog.getByRole("button", { name: "View report" }).click();
+    await expect(page).toHaveURL(/\/reports\/1$/);
+    await expect(page.getByRole("heading", { name: "Purok 1" })).toBeVisible();
+    await page.goto("/home");
+    await expect(page.getByRole("heading", { name: "Posted reports" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("an advisory on someone else's report never pops up", async ({ context, page }) => {
+    await mock(context, "resident", { reports: [report(2, "approved")], advisories: [advisory(5, 2)] });
+    await context.addInitScript((entries) => entries.forEach(([key, value]) => localStorage.setItem(key, value)), seenAdvisories([]));
+    await page.goto("/home");
+    await expect(page.locator("#posted-reports").getByText("Advisory from Kap Reyes")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("the rules: catch-up, grouped in the window, by report id when viewing", async () => {
+    expect(catchUpAdvisories([{ id: 1 }], null, new Set())).toBeNull();
+    expect(catchUpAdvisories([{ id: 1 }, { id: 2 }], 1, new Set(["advisory:1"]))).toEqual([{ id: 2 }]);
+
+    const shown = new Set<string>();
+    const dialogs: number[][] = [];
+    const queue = new PopupQueue<{ id: number; report_id: number }>({
+      keyOf: advisoryPopupKey,
+      reportIdOf: (a) => a.report_id,
+      isShown: (key) => shown.has(key),
+      markShown: (keys) => keys.forEach((key) => shown.add(key)),
+      isViewing: (id) => id === 9,
+      show: (rows) => dialogs.push(rows.map((a) => a.id)),
+      windowMs: 20,
+    });
+    queue.add({ id: 1, report_id: 1 });
+    queue.add({ id: 2, report_id: 1 });
+    queue.add({ id: 3, report_id: 9 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(dialogs).toEqual([[1, 2]]);
+    expect(shown.has("advisory:3")).toBe(true);
+  });
+
+  test("never appears on the login page or for guests", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.goto("/conditions");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 });
 

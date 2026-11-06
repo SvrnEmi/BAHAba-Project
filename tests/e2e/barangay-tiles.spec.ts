@@ -203,6 +203,9 @@ test.describe("barangay home tiles", () => {
     expect(Math.min(...phone.map((b) => b.height))).toBeGreaterThanOrEqual(48);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
+    // The header only sticks on desktop, so on a phone the section goes to the top.
+    expect(await page.locator("#barangay-sections").evaluate((el) => getComputedStyle(el).scrollMarginTop)).toBe("16px");
+
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect.poll(async () => distinct((await boxes()).map((b) => b.x))).toBe(3);
 

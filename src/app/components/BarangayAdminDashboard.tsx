@@ -580,7 +580,7 @@ export function BarangayAdminDashboard() {
             onChanged={loadStatus}
           />
 
-          <div id={SECTIONS_ID} tabIndex={-1} className="clay p-5 outline-none" style={{ scrollMarginTop: headerHeight + 16 }}>
+          <div id={SECTIONS_ID} tabIndex={-1} className="clay scroll-mt-4 p-5 outline-none lg:scroll-mt-[var(--sticky-offset)]" style={{ "--sticky-offset": `${headerHeight + 16}px` } as CSSProperties}>
             <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
               {BARANGAY_TABS.map(({ id, label }) => {
                 const badge = id === "reports" ? pendingCount + quickPendingCount : 0;

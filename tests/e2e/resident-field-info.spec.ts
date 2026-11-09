@@ -119,6 +119,11 @@ test.describe("Current alerts", () => {
     await mock(context, { active: [alertRow(1, "Map notice"), alertRow(2, "Older notice")] });
     await signIn(page);
     await page.getByRole("link", { name: "Map", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Flood Risk Levels" })).toBeVisible();
+    await expect(page.getByText("High risk", { exact: true })).toBeVisible();
+    await expect(page.getByText("Medium risk", { exact: true })).toBeVisible();
+    await expect(page.getByText("Low risk", { exact: true })).toBeVisible();
+    await expect(page.getByText("Levels are set automatically from Open-Meteo rainfall and may be adjusted by MDRRMO.")).toBeVisible();
     const banner = page.getByRole("link", { name: /Map notice/ });
     await expect(banner).toContainText("Orange - Be Prepared");
     await expect(banner).toContainText("+1 more");

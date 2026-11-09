@@ -286,6 +286,9 @@ export function GISHazardMap() {
               <RiskBadge risk="medium" compact />
               <RiskBadge risk="low" compact />
             </div>
+            <p className="mt-3 max-w-52 text-xs" style={{ color: "var(--text-secondary)" }}>
+              Levels are set automatically from Open-Meteo rainfall and may be adjusted by MDRRMO.
+            </p>
           </div>
         )}
       </div>

@@ -395,13 +395,21 @@ class _HazardMapScreenState extends State<HazardMapScreen> {
                   ),
                   const SizedBox(height: 10),
                   const _LegendItem(
-                      color: AppColors.riskHigh, label: 'High Risk (2m+)'),
+                      color: AppColors.riskHigh, label: 'High Risk'),
                   const SizedBox(height: 6),
                   const _LegendItem(
-                      color: AppColors.riskMedium, label: 'Medium Risk (1-2m)'),
+                      color: AppColors.riskMedium, label: 'Medium Risk'),
                   const SizedBox(height: 6),
                   const _LegendItem(
-                      color: AppColors.riskLow, label: 'Low Risk (<1m)'),
+                      color: AppColors.riskLow, label: 'Low Risk'),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Levels are set automatically from Open-Meteo rainfall and may be adjusted by MDRRMO.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             )
